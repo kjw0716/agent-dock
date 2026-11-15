@@ -1,0 +1,11 @@
+Agent HUD for Windows
+Copyright 2026 the agent-hud-win authors
+
+The layout idea (a small floating panel with one bot per agent), the table of
+where each agent keeps its session files, and the general approach to reading an
+agent's state come from jazzenchen/agent-hud-open (Apache-2.0,
+https://github.com/jazzenchen/agent-hud-open). No source code or image assets
+from that project are included; all code and artwork here were written from scratch.
+
+Agent names and brand colours belong to their respective owners. The mascots are
+original drawings and are not official logos.

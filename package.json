@@ -1,0 +1,41 @@
+{
+  "name": "agent-hud-win",
+  "version": "0.2.0",
+  "description": "A small always-on-top Windows HUD: is each coding agent working, waiting for you, or done?",
+  "main": "main.js",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "electron .",
+    "demo": "electron . --demo",
+    "test": "node --test test/sources.test.js test/agents.test.js",
+    "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  },
+  "keywords": [
+    "windows",
+    "electron",
+    "desktop-widget",
+    "hud",
+    "ai-agents",
+    "coding-agents",
+    "claude-code",
+    "codex",
+    "opencode",
+    "cursor",
+    "gemini-cli",
+    "copilot",
+    "developer-tools",
+    "status"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kjw0716/agent-hud-win.git"
+  },
+  "homepage": "https://github.com/kjw0716/agent-hud-win",
+  "bugs": {
+    "url": "https://github.com/kjw0716/agent-hud-win/issues"
+  }
+}
