@@ -1,5 +1,5 @@
 {
-  "name": "agent-hud-win",
+  "name": "agent-dock",
   "version": "0.2.0",
   "description": "A small always-on-top Windows HUD: is each coding agent working, waiting for you, or done?",
   "main": "main.js",
@@ -32,10 +32,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/kjw0716/agent-hud-win.git"
+    "url": "https://github.com/kjw0716/agent-dock.git"
   },
-  "homepage": "https://github.com/kjw0716/agent-hud-win",
+  "homepage": "https://github.com/kjw0716/agent-dock",
   "bugs": {
-    "url": "https://github.com/kjw0716/agent-hud-win/issues"
+    "url": "https://github.com/kjw0716/agent-dock/issues"
   }
 }

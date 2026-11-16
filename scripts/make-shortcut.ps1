@@ -1,4 +1,4 @@
-# Creates "Agent HUD" shortcuts on the Desktop and in the Start menu.
+# Creates "Agent Dock" shortcuts on the Desktop and in the Start menu.
 # Ctrl+Alt+H starts it (or brings the window to the front when it is already running).
 param([switch]$NoStartMenu)
 $ErrorActionPreference = 'Stop'
@@ -12,18 +12,20 @@ function New-Link($path) {
   $l.Arguments = '.'
   $l.WorkingDirectory = $root
   $l.IconLocation = (Join-Path $root 'assets\icon.ico') + ',0'
-  $l.Description = 'Agent HUD - working / waiting / done for every coding agent'
+  $l.Description = 'Agent Dock - working / waiting / done for every coding agent'
   $l.WindowStyle = 7
   $l.Save()
   $l
 }
 $desktop = [Environment]::GetFolderPath('Desktop')
+$old = @((Join-Path $desktop 'Agent HUD.lnk'), (Join-Path ([Environment]::GetFolderPath('Programs')) 'Agent HUD.lnk'))
+$old | Where-Object { Test-Path $_ } | Remove-Item -Force  # shortcuts from before the rename
 if (-not $desktop) { throw 'Could not find the Desktop folder' }
-$d = New-Link (Join-Path $desktop 'Agent HUD.lnk')
+$d = New-Link (Join-Path $desktop 'Agent Dock.lnk')
 $d.Hotkey = 'CTRL+ALT+H'; $d.Save()
 "Desktop:    $($d.FullName)"
 if (-not $NoStartMenu) {
-  $sm = Join-Path ([Environment]::GetFolderPath('Programs')) 'Agent HUD.lnk'
+  $sm = Join-Path ([Environment]::GetFolderPath('Programs')) 'Agent Dock.lnk'
   $null = New-Link $sm
   "Start menu: $sm"
 }

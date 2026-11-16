@@ -8,7 +8,14 @@ const { collect, AGENTS } = require('./sources');
 const { installedIds } = require('./agents');
 
 const DEMO = process.argv.includes('--demo');
-const DATA_DIR = process.env.AGENT_HUD_DATA || path.join(os.homedir(), '.agent-hud-win');
+const DATA_DIR = process.env.AGENT_DOCK_DATA || process.env.AGENT_HUD_DATA || path.join(os.homedir(), '.agent-dock');
+// Renamed from agent-hud-win: carry the old settings folder over once.
+if (DATA_DIR === path.join(os.homedir(), '.agent-dock') && !fs.existsSync(DATA_DIR)) {
+  const old = path.join(os.homedir(), '.agent-hud-win');
+  try {
+    if (fs.existsSync(old)) fs.cpSync(old, DATA_DIR, { recursive: true });
+  } catch {}
+}
 const CONFIG = path.join(DATA_DIR, 'config.json');
 const DEFAULT_W = 312; // 288 panel + 12 transparent margin each side
 const MARGIN = 12;
@@ -56,10 +63,11 @@ const agentOn = (cfg, id) => !(cfg.agents && cfg.agents[id] === false);
 
 // ------------------------------------------------------------- autostart
 const startupFile = () =>
-  path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'agent-hud-win.vbs');
+  path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'agent-dock.vbs');
 const autostartOn = () => fs.existsSync(startupFile());
 function setAutostart(on) {
   try {
+    fs.rmSync(path.join(path.dirname(startupFile()), 'agent-hud-win.vbs'), { force: true }); // old name
     if (!on) return fs.rmSync(startupFile(), { force: true });
     const q = (s) => s.replace(/"/g, '""');
     fs.writeFileSync(
@@ -241,9 +249,9 @@ function tick() {
   shot(rows);
 }
 
-// Optional: AGENT_HUD_SHOT_DIR saves a screenshot of the real window whenever the set of states changes.
+// Optional: AGENT_DOCK_SHOT_DIR saves a screenshot of the real window whenever the set of states changes.
 function shot(rows) {
-  const dir = process.env.AGENT_HUD_SHOT_DIR;
+  const dir = process.env.AGENT_DOCK_SHOT_DIR || process.env.AGENT_HUD_SHOT_DIR;
   if (!dir || !win) return;
   const sig = rows.map((r) => `${r.id}-${r.state}`).join('_') || 'empty';
   if (sig === lastSig) return;
@@ -276,7 +284,7 @@ app.whenReady().then(() => {
   if (!gotLock) return;
   createWindow();
   tray = new Tray(trayIcon());
-  tray.setToolTip('Agent HUD');
+  tray.setToolTip('Agent Dock');
   tray.setContextMenu(menu());
   tray.on('click', () => (win.isVisible() ? win.hide() : win.show()));
 

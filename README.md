@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/icon-256.png" width="112" alt="Agent HUD for Windows logo">
+  <img src="assets/icon-256.png" width="112" alt="Agent Dock logo">
 </p>
 
-<h1 align="center">Agent HUD for Windows</h1>
+<h1 align="center">Agent Dock</h1>
 
 <p align="center">
   <strong>Is your coding agent working, waiting for you, or done?</strong><br>
@@ -27,11 +27,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/hero.png" alt="Agent HUD in three sizes: icons only, the standard panel, and the wide panel with every session" width="900">
+  <img src="docs/hero.png" alt="Agent Dock in three sizes: icons only, the standard panel, and the wide panel with every session" width="900">
 </p>
 
 You start a task in Claude Code, another in Codex, a third in OpenCode, then go back to your own work.
-Agent HUD sits on the edge of your screen and shows, for every agent, one of three states:
+Agent Dock sits on the edge of your screen and shows, for every agent, one of three states:
 
 | State | Meaning | What you see |
 | --- | --- | --- |
@@ -57,8 +57,8 @@ No quotas, no token charts, nothing to configure first. It only reads files your
 You need Windows 10 or 11, [Node.js](https://nodejs.org/) 20 or newer and Git. (The screenshot script `scripts/shoot.js` needs Node 22 or newer.)
 
 ```powershell
-git clone https://github.com/kjw0716/agent-hud-win.git agent-hud-win
-cd agent-hud-win
+git clone https://github.com/kjw0716/agent-dock.git
+cd agent-dock
 npm install
 npm start
 ```
@@ -118,8 +118,8 @@ Paths marked "not yet" are untested here. If one is wrong, it is one line in [`a
 
 ## How it works
 
-- **Claude Code** keeps a registry file per running process. The HUD reads its `status`, drops entries whose process is gone, and maps `busy → Working`, `waiting → Waiting`, `idle → Done`.
-- **Codex** writes one JSON line per event. The HUD reads the tail of the newest session files: `task_started` is Working, `task_complete` or `turn_aborted` is Done, an unanswered question or approval is Waiting. A working turn that has been silent for 30 minutes counts as Done; a pending question or approval stays Waiting.
+- **Claude Code** keeps a registry file per running process. Agent Dock reads its `status`, drops entries whose process is gone, and maps `busy → Working`, `waiting → Waiting`, `idle → Done`.
+- **Codex** writes one JSON line per event. Agent Dock reads the tail of the newest session files: `task_started` is Working, `task_complete` or `turn_aborted` is Done, an unanswered question or approval is Waiting. A working turn that has been silent for 30 minutes counts as Done; a pending question or approval stays Waiting.
 - **Everyone else:** session files written in the last 12 seconds mean Working. An open app, or activity in the last 6 hours, means Done. Anything older is hidden.
 - The list of running programs comes from `tasklist`, refreshed every 5 seconds and never on the UI thread.
 
@@ -129,7 +129,7 @@ Claude's `waiting` field is not a documented interface and may change between Cl
 
 - Nothing leaves your computer. There are no network requests.
 - Nothing in an agent's own configuration is changed or installed.
-- The HUD writes two small files to `~/.agent-hud-win/`: `config.json` (position, width, enabled agents, language) and `state.json` (the last state it showed).
+- Agent Dock writes two small files to `~/.agent-dock/`: `config.json` (position, width, enabled agents, language) and `state.json` (the last state it showed).
 - Message contents are never shown. The only text taken from an agent is the session name (or the project folder name when there is none), plus event types and timestamps.
 
 ## Configuration
@@ -137,8 +137,8 @@ Claude's `waiting` field is not a documented interface and may change between Cl
 | Setting | How |
 | --- | --- |
 | Agents, always on top, launch at login, language | Settings (sliders button) |
-| Data folder | environment variable `AGENT_HUD_DATA` |
-| Save a screenshot whenever the set of states changes | environment variable `AGENT_HUD_SHOT_DIR` |
+| Data folder | environment variable `AGENT_DOCK_DATA` |
+| Save a screenshot whenever the set of states changes | environment variable `AGENT_DOCK_SHOT_DIR` |
 | Demo data | `npm run demo` |
 
 ## Development

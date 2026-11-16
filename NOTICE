@@ -1,5 +1,5 @@
-Agent HUD for Windows
-Copyright 2026 the agent-hud-win authors
+Agent Dock
+Copyright 2026 the agent-dock authors
 
 The layout idea (a small floating panel with one bot per agent), the table of
 where each agent keeps its session files, and the general approach to reading an

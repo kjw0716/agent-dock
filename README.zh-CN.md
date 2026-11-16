@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/icon-256.png" width="112" alt="Agent HUD for Windows 图标">
+  <img src="assets/icon-256.png" width="112" alt="Agent Dock 图标">
 </p>
 
-<h1 align="center">Agent HUD for Windows</h1>
+<h1 align="center">Agent Dock</h1>
 
 <p align="center">
   <strong>你的编程 Agent 是在工作、在等你，还是已经完成？</strong><br>
@@ -27,11 +27,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/hero.png" alt="三种大小的 Agent HUD：只有图标、标准面板、展开全部会话的宽面板" width="900">
+  <img src="docs/hero.png" alt="三种大小的 Agent Dock：只有图标、标准面板、展开全部会话的宽面板" width="900">
 </p>
 
 你在 Claude Code 里开了一个任务，在 Codex 里开了第二个，在 OpenCode 里开了第三个，然后回去做自己的事。
-Agent HUD 停在屏幕边缘，给每个 Agent 显示三种状态之一：
+Agent Dock 停在屏幕边缘，给每个 Agent 显示三种状态之一：
 
 | 状态 | 含义 | 你看到的 |
 | --- | --- | --- |
@@ -57,8 +57,8 @@ Agent HUD 停在屏幕边缘，给每个 Agent 显示三种状态之一：
 需要 Windows 10 或 11、[Node.js](https://nodejs.org/) 20 及以上、Git。（截图脚本 `scripts/shoot.js` 需要 Node 22 及以上。）
 
 ```powershell
-git clone https://github.com/kjw0716/agent-hud-win.git agent-hud-win
-cd agent-hud-win
+git clone https://github.com/kjw0716/agent-dock.git
+cd agent-dock
 npm install
 npm start
 ```
@@ -118,8 +118,8 @@ Claude Code 和 Codex 有专门的读取器，其余 Agent 共用一个读取器
 
 ## 工作原理
 
-- **Claude Code** 为每个运行中的进程保存一个登记文件。HUD 读取其中的 `status`，忽略进程已退出的条目：`busy → 工作中`、`waiting → 等你`、`idle → 已完成`。
-- **Codex** 每个事件写一行 JSON。HUD 读取最新会话文件的末尾：`task_started` 是工作中，`task_complete` 或 `turn_aborted` 是已完成，没回答的提问或批准是等你。工作中的一轮静默超过 30 分钟按已完成算；没回答的提问或批准会一直保持「等你」。
+- **Claude Code** 为每个运行中的进程保存一个登记文件。Agent Dock 读取其中的 `status`，忽略进程已退出的条目：`busy → 工作中`、`waiting → 等你`、`idle → 已完成`。
+- **Codex** 每个事件写一行 JSON。Agent Dock 读取最新会话文件的末尾：`task_started` 是工作中，`task_complete` 或 `turn_aborted` 是已完成，没回答的提问或批准是等你。工作中的一轮静默超过 30 分钟按已完成算；没回答的提问或批准会一直保持「等你」。
 - **其他 Agent：** 会话文件在最近 12 秒内有写入算工作中；程序在运行，或 6 小时内有活动算已完成；更久的不显示。
 - 运行中的程序列表来自 `tasklist`，每 5 秒异步刷新，不会卡住界面。
 
@@ -129,7 +129,7 @@ Claude 的 `waiting` 字段不是公开接口，不同版本的 Claude Code 可�
 
 - 数据不会离开你的电脑，没有任何网络请求。
 - 不会修改或安装任何 Agent 自己的配置。
-- HUD 在 `~/.agent-hud-win/` 下写两个小文件：`config.json`（位置、宽度、启用的 Agent、语言）和 `state.json`（最近显示的状态）。
+- Agent Dock 在 `~/.agent-dock/` 下写两个小文件：`config.json`（位置、宽度、启用的 Agent、语言）和 `state.json`（最近显示的状态）。
 - 不会显示消息内容。从 Agent 取用的文字只有会话名（没有时用项目文件夹名），以及事件类型和时间戳。
 
 ## 配置
@@ -137,8 +137,8 @@ Claude 的 `waiting` 字段不是公开接口，不同版本的 Claude Code 可�
 | 设置 | 方式 |
 | --- | --- |
 | Agent、置顶、开机自启、语言 | 设置（滑块按钮） |
-| 数据目录 | 环境变量 `AGENT_HUD_DATA` |
-| 状态组合变化时保存窗口截图 | 环境变量 `AGENT_HUD_SHOT_DIR` |
+| 数据目录 | 环境变量 `AGENT_DOCK_DATA` |
+| 状态组合变化时保存窗口截图 | 环境变量 `AGENT_DOCK_SHOT_DIR` |
 | 演示数据 | `npm run demo` |
 
 ## 开发
