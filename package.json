@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "demo": "electron . --demo",
-    "test": "node --test test/sources.test.js test/agents.test.js test/asks.test.js test/channel.test.js test/plugin-install.test.js",
+    "test": "node --test test/sources.test.js test/agents.test.js test/asks.test.js test/channel.test.js test/plugin-install.test.js test/unread.test.js",
     "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1"
   },
   "devDependencies": {

@@ -6,6 +6,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { collect, AGENTS } = require('./sources');
 const { Channel } = require('./channel');
+const { UnreadTracker } = require('./unread');
 const pluginInstall = require('./plugin-install');
 const { installedIds } = require('./agents');
 
@@ -20,6 +21,22 @@ if (DATA_DIR === path.join(os.homedir(), '.agent-dock') && !fs.existsSync(DATA_D
 }
 const CONFIG = path.join(DATA_DIR, 'config.json');
 const channel = new Channel(path.join(DATA_DIR, 'channel'));
+const UNREAD_FILE = path.join(DATA_DIR, 'unread.json');
+const unread = new UnreadTracker((() => {
+  try {
+    const v = JSON.parse(fs.readFileSync(UNREAD_FILE, 'utf8'));
+    return Array.isArray(v) ? v.filter((k) => typeof k === 'string').slice(0, 500) : [];
+  } catch {
+    return [];
+  }
+})());
+const saveUnread = () => {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(UNREAD_FILE, JSON.stringify(unread.list()));
+  } catch {}
+};
+const demoRead = new Set(); // demo mode only: agents whose finished work the user clicked
 const sent = new Map(); // sessionId -> { askId, promptId }: the answer the user clicked for the ask that is open
 let pluginBusy = false;
 const DEFAULT_W = 312; // 288 panel + 12 transparent margin each side
@@ -100,7 +117,7 @@ function demoRows() {
   const names = Object.fromEntries(AGENTS.map((a) => [a.id, a.name]));
   const demoAsk = { id: 'demo-ask', kind: 'next_step', question: 'Ship the release now?', recap: 'The tests pass and the build is ready to publish.', options: [{ label: 'Ship it', message: 'Yes, ship it' }, { label: 'Wait', message: 'Hold on, wait' }], at: now };
   const mk = (id, list) => row(id, names[id], list.map(([l, st, ago, k]) => s(id, l, st, ago, k)));
-  return [
+  const out = [
     withAsk(mk('claude', [['sub2api site', 'waiting', 2], ['docs review', 'waiting', 4], ['agent-hud', 'working', 6], ['image pipeline', 'done', 40]]), demoAsk),
     mk('codex', [['canvas', 'working', 3], ['ops', 'done', 20]]),
     mk('opencode', [[null, 'done', 3, 'open']]),
@@ -110,6 +127,9 @@ function demoRows() {
     mk('grok', [[null, 'working', 0, 'open']]),
     mk('kimi', [[null, 'done', 12, 'recent']]),
   ];
+  for (const s of out[1].sessions) if (s.label === 'ops' && !demoRead.has('codex')) s.unread = true; // finished and not looked at yet
+  if (!demoRead.has('opencode')) out[2].sessions[0].unread = true;
+  return out;
 }
 
 // -------------------------------------------------------------- tray icon
@@ -277,11 +297,20 @@ function tick() {
     rows = [];
   }
   decorateAsks(rows);
+  if (!DEMO) {
+    const sessions = rows.flatMap((r) => r.sessions);
+    if (unread.update(sessions)) saveUnread();
+    for (const s of sessions) if (unread.has(s)) s.unread = true;
+  }
   allRows = rows;
   const cfg = readConfig();
   rows = rows.filter((r) => agentOn(cfg, r.id));
-  const waitingTotal = rows.reduce((n, r) => n + r.sessions.filter((s) => s.state === 'waiting').length, 0);
-  const tip = waitingTotal ? `Agent Dock · ${waitingTotal} ${cfg.lang === 'zh' ? '个在等你' : 'waiting for you'}` : 'Agent Dock';
+  const countAll = (pred) => rows.reduce((n, r) => n + r.sessions.filter(pred).length, 0);
+  const waitingTotal = countAll((s) => s.state === 'waiting');
+  const unreadTotal = countAll((s) => s.unread);
+  const zh = cfg.lang === 'zh';
+  const parts = [waitingTotal && `${waitingTotal} ${zh ? '个在等你' : 'waiting for you'}`, unreadTotal && `${unreadTotal} ${zh ? '个未读' : 'unread'}`].filter(Boolean);
+  const tip = parts.length ? `Agent Dock · ${parts.join(' · ')}` : 'Agent Dock';
   if (tray && tip !== lastTip) {
     lastTip = tip; // setting an unchanged tooltip every second can make it flicker
     tray.setToolTip(tip);
@@ -352,6 +381,22 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('settings:get', () => settingsView());
   ipcMain.handle('settings:set', (_e, p) => setSettings(p || {}));
+  ipcMain.on('read', (_e, agentId) => {
+    // A click on an agent's row: what it finished is read now.
+    if (typeof agentId !== 'string' || !AGENTS.some((a) => a.id === agentId)) return;
+    if (DEMO) {
+      demoRead.add(agentId);
+      lastJson = '';
+      tick();
+      return;
+    }
+    if (unread.readAgent(agentId)) {
+      saveUnread();
+      for (const r of allRows) if (r.id === agentId) for (const s of r.sessions) delete s.unread;
+      lastJson = '';
+      tick();
+    }
+  });
   ipcMain.handle('answer', (_e, req) => {
     const { sessionId, askId, option, custom } = req || {};
     const s = findSession(sessionId);

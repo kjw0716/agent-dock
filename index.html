@@ -70,6 +70,17 @@
   .waiting .eye { transform: scaleY(1.2); }
   .done .ring { stroke: var(--done); opacity: .55; }
   .done .eye { transform: scaleY(.75); }
+  /* done and not looked at yet: the green blinks until you click the row */
+  .row.unread.done .ring { animation: blinkgreen 1.1s ease-in-out infinite; stroke-width: 3; opacity: 1; }
+  .row.unread.done .check { animation: pop 1.1s ease-in-out infinite; transform-origin: 84px 84px; }
+  .row.unread.done .chip { animation: glowgreen 1.1s ease-in-out infinite; }
+  .row.unread .counts .c-done.on { animation: glowgreen 1.1s ease-in-out infinite; }
+  .s.unread b { animation: blinkdot 1.1s ease-in-out infinite; }
+  .bot .newdot { position: absolute; right: -2px; top: -2px; width: max(9px, calc(var(--m) * .2)); height: max(9px, calc(var(--m) * .2)); border-radius: 50%; background: var(--done); box-shadow: 0 0 0 2px #14161b; animation: blinkdot 1.1s ease-in-out infinite; }
+  @keyframes blinkgreen { 0%, 100% { opacity: 1; stroke-width: 3.5; } 50% { opacity: .25; stroke-width: 2.5; } }
+  @keyframes pop { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: .55; } }
+  @keyframes glowgreen { 0%, 100% { background-color: rgba(61, 220, 151, .13); } 50% { background-color: rgba(61, 220, 151, .38); } }
+  @keyframes blinkdot { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
   @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
@@ -267,7 +278,7 @@ const SPEC = {
 const FALLBACK = { c: ['#a3a9b5', '#7b818c'], body: (f) => `<circle cx="50" cy="50" r="30" fill="${f}"/>` };
 
 const HAND = '<svg viewBox="0 0 24 24"><rect x="6" y="11" width="12" height="9" rx="4"/><rect x="6" y="5" width="2.7" height="10" rx="1.35"/><rect x="9.4" y="2.5" width="2.7" height="12" rx="1.35"/><rect x="12.9" y="3" width="2.7" height="11.5" rx="1.35"/><rect x="16.3" y="5" width="2.7" height="10" rx="1.35"/><rect x="2.6" y="11.5" width="2.7" height="6.5" rx="1.35" transform="rotate(-32 4 14)"/></svg>';
-function mascot(id, state, waiting = 0) {
+function mascot(id, state, waiting = 0, fresh = false) {
   const sp = SPEC[id] || FALLBACK;
   const gid = 'g' + id + Math.random().toString(36).slice(2, 6);
   const stops = sp.c.map((c, i) => `<stop offset="${(i / (sp.c.length - 1 || 1)).toFixed(2)}" stop-color="${c}"/>`).join('');
@@ -288,7 +299,7 @@ function mascot(id, state, waiting = 0) {
     <g class="body-g">${sp.body('url(#' + gid + ')')}${face}</g>
     <g class="check"><circle cx="84" cy="84" r="13" fill="#14161b"/><circle cx="84" cy="84" r="10" fill="#3ddc97"/>
       <path d="M79 84.5l3.6 3.6 6.4-7.2" fill="none" stroke="#10241b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
-  </svg>${waiting > 0 ? `<div class="hand" title="${esc(t('waiting'))} ${waiting}">${HAND}<span>${waiting}</span></div>` : ''}</div>`;
+  </svg>${fresh ? '<div class="newdot"></div>' : ''}${waiting > 0 ? `<div class="hand" title="${esc(t('waiting'))} ${waiting}">${HAND}<span>${waiting}</span></div>` : ''}</div>`;
 }
 
 /* ------------------------------------------------------------------ views */
@@ -310,13 +321,13 @@ function renderStatus(el) {
   el.innerHTML = rows.map((r) => {
     const multi = r.sessions.length > 1;
     const list = r.sessions.map((s) =>
-      `<div class="s ${s.state}${s.dim ? ' dim' : ''}"><b></b><span>${esc(lbl(s))}</span><em>${t(s.state)} · ${stamp(s)}</em></div>`).join('');
+      `<div class="s ${s.state}${s.dim ? ' dim' : ''}${s.unread ? ' unread' : ''}"><b></b><span>${esc(lbl(s))}</span><em>${t(s.state)} · ${stamp(s)}</em></div>`).join('');
     const counts = ['working', 'waiting', 'done'].map((st) => {
       const n = countOf(r, st);
       return `<span class="c-${st}${n ? ' on' : ''}">${t(st)} ${n}</span>`;
     }).join('');
-    return `<div class="row ${r.state}${r.top.dim ? ' dim' : ''}${multi ? ' multi' : ''}${open.has(r.id) ? ' open' : ''}" data-id="${r.id}" title="${esc(r.name)} · ${t(r.state)}">
-      <div class="head">${mascot(r.id, r.state, countOf(r, 'waiting'))}
+    return `<div class="row ${r.state}${r.sessions.some((x) => x.unread) ? ' unread' : ''}${r.top.dim ? ' dim' : ''}${multi ? ' multi' : ''}${open.has(r.id) ? ' open' : ''}" data-id="${r.id}" title="${esc(r.name)} · ${t(r.state)}">
+      <div class="head">${mascot(r.id, r.state, countOf(r, 'waiting'), r.state !== 'done' && r.sessions.some((x) => x.unread))}
         <div class="main"><div class="name">${esc(r.name)}${multi ? `<small>${r.sessions.length}</small>` : ''}</div><div class="sub">${esc(lbl(r.top))} · ${stamp(r.top)}</div><div class="counts">${counts}</div></div>
         <div class="chip">${t(r.state)}</div></div>
       ${r.sessions.filter((x) => x.ask).slice(0, 2).map(askCard).join('')}
@@ -510,6 +521,7 @@ document.getElementById('rows').addEventListener('click', async (e) => {
   const row = e.target.closest('.row');
   if (!row) return;
   const id = row.dataset.id;
+  if (row.classList.contains('unread')) window.hud.markRead(id); // looking at it counts as reading it
   open.has(id) ? open.delete(id) : open.add(id);
   syncExpanded(true); // a click always re-asserts it, even after a manual width drag
   render();

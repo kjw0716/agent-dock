@@ -47,6 +47,7 @@ No quotas, no token charts, nothing to configure first. It only reads files your
 - **Resizes with its content.** Drag the left or right edge: the layout changes with the width, from icons only to a full panel with per-state counts. The height always follows the content, so nothing is cut off and there is no empty space.
 - **Click a row to open it.** The window grows to show that agent's sessions. Close the rows and it returns to exactly the previous size and position.
 - **A raised hand with a count.** The corner of an agent's mascot shows a hand and how many of its sessions are waiting for you; the tray tooltip shows the total.
+- **Unread.** When an agent finishes while the dock is watching, its green ring and check **blink** until you click its row. If something else of that agent is still working, a small blinking green dot marks the mascot instead. The tray tooltip counts unread sessions.
 - **Per-state counts.** `Working 2 · Waiting 1 · Done 5` for every agent.
 - **Pick your agents.** Settings lists every supported agent, installed ones first, with a switch for each.
 - **English and 中文.** English is the default; switch in Settings.
@@ -95,7 +96,7 @@ To start at login, turn on **Launch at login** in Settings.
 
 | Do this | What happens |
 | --- | --- |
-| Click an agent's row | The window grows and shows that agent's sessions. Click again (or close the last open row) to go back |
+| Click an agent's row | Marks what it finished as read (the green stops blinking), and the window grows and shows that agent's sessions. Click again (or close the last open row) to go back |
 | Click the expand button in the top bar | Opens or closes every row at once |
 | Drag the left or right edge | Changes the width and the layout; height follows the content |
 | Drag the top bar | Moves the window |
