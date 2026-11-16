@@ -11,12 +11,17 @@ class UnreadTracker {
   /** `initial`: keys remembered from the last run; they survive only while the session is still done. */
   constructor(initial = []) {
     this.prev = new Map(); // key -> last state seen
+    this.workStart = new Map(); // key -> when it started working (or waiting)
     this.unread = new Set();
     this.initial = new Set(initial);
   }
 
-  /** Feed the current sessions (every agent). Returns true when the unread set changed. */
-  update(sessions) {
+  /**
+   * Feed the current sessions (every agent). Returns true when the unread set changed.
+   * `minWork(agent)`: how long it must have been busy before finishing counts as unread, in ms; it
+   * keeps agents whose working state is only a guess from flapping into "unread" every few seconds.
+   */
+  update(sessions, now = Date.now(), minWork = () => 0) {
     const before = this.unread.size + [...this.unread].join('|');
     const seen = new Set();
     for (const s of sessions) {
@@ -25,16 +30,20 @@ class UnreadTracker {
       const prev = this.prev.get(key);
       if (s.state !== 'done') {
         this.unread.delete(key);
+        if (!this.workStart.has(key)) this.workStart.set(key, now);
       } else if (prev === 'working' || prev === 'waiting') {
-        this.unread.add(key);
+        if (now - (this.workStart.get(key) ?? now) >= minWork(s.agent)) this.unread.add(key);
+        this.workStart.delete(key);
       } else if (prev === undefined && this.initial.has(key)) {
         this.unread.add(key); // it was unread before the dock restarted and is still done
       }
+      if (s.state === 'done') this.workStart.delete(key);
       this.prev.set(key, s.state);
     }
     for (const key of [...this.prev.keys()]) {
       if (!seen.has(key)) {
         this.prev.delete(key);
+        this.workStart.delete(key);
         this.unread.delete(key);
       }
     }

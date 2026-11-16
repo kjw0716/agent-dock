@@ -299,7 +299,8 @@ function tick() {
   decorateAsks(rows);
   if (!DEMO) {
     const sessions = rows.flatMap((r) => r.sessions);
-    if (unread.update(sessions)) saveUnread();
+    // Claude and Codex report their state exactly; for the other agents "working" is a guess from file activity, so a run must last a while to count.
+    if (unread.update(sessions, Date.now(), (agent) => (agent === 'claude' || agent === 'codex' ? 0 : 30000))) saveUnread();
     for (const s of sessions) if (unread.has(s)) s.unread = true;
   }
   allRows = rows;

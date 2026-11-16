@@ -54,3 +54,16 @@ test('remembered keys survive a restart only while the session is still done', (
   t2.update([s('claude', 'a', 'done')]);
   assert.deepStrictEqual(t2.list(), ['claude:a']); // not re-evaluated after the first update
 });
+
+test('minWork: a short or flapping busy spell does not count as unread', () => {
+  const t = new UnreadTracker();
+  const minWork = (agent) => (agent === 'opencode' ? 30000 : 0);
+  t.update([s('opencode', 'o', 'working'), s('claude', 'c', 'working')], 1000, minWork);
+  t.update([s('opencode', 'o', 'done'), s('claude', 'c', 'done')], 6000, minWork); // 5 s of work
+  assert.deepStrictEqual(t.list(), ['claude:c']);
+  const c = s('claude', 'c', 'done');
+  t.update([s('opencode', 'o', 'working'), c], 7000, minWork);
+  t.update([s('opencode', 'o', 'working'), c], 40000, minWork);
+  t.update([s('opencode', 'o', 'done'), c], 41000, minWork); // 34 s of work
+  assert.deepStrictEqual(t.list(), ['claude:c', 'opencode:o']);
+});
