@@ -141,6 +141,22 @@ function excerpt(raw, max = 320) {
   return t;
 }
 
+/** The whole reply as plain text for the scrollable card: markdown marks removed, paragraphs and lines kept. */
+function fullText(raw, max = 8000) {
+  let t = String(raw)
+    .replace(/```[^\n]*\n?([\s\S]*?)```/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/\*\*|`/g, '')
+    .replace(/^(\s*)[-+*]\s+/gm, '$1• ')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (t.length > max) t = t.slice(0, max).trimEnd() + '…';
+  return t;
+}
+
 /** The last assistant text after the final real user turn: { text, at, id }, or null. */
 function lastReplyFromLines(lines) {
   let reply = null;
@@ -158,10 +174,10 @@ function lastReplyFromLines(lines) {
     if (e.type !== 'assistant') continue;
     const content = e.message && e.message.content;
     if (!Array.isArray(content)) continue;
-    const words = content.filter((b) => b && b.type === 'text' && text(b.text)).map((b) => b.text).join(' ');
+    const words = content.filter((b) => b && b.type === 'text' && text(b.text)).map((b) => b.text).join('\n\n');
     if (!words.trim()) continue;
     const at = Date.parse(e.timestamp) || 0;
-    reply = { text: excerpt(words), at, id: 'reply:' + (e.uuid || (e.message && e.message.id) || at) };
+    reply = { text: fullText(words), at, id: 'reply:' + (e.uuid || (e.message && e.message.id) || at) };
   }
   return reply;
 }
@@ -211,4 +227,4 @@ function inspectSession(sessionId, cwd, opts = {}) {
 /** The pending ask of a session, or null. */
 const pendingAsk = (sessionId, cwd, opts) => inspectSession(sessionId, cwd, opts).ask;
 
-module.exports = { pendingAsk, inspectSession, lastReplyFromLines, excerpt, pendingFromLines, transcriptPath, projectFolder, fromToolUse, WRAP_UP };
+module.exports = { pendingAsk, inspectSession, lastReplyFromLines, excerpt, fullText, pendingFromLines, transcriptPath, projectFolder, fromToolUse, WRAP_UP };

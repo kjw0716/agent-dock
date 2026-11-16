@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { pendingFromLines, transcriptPath, projectFolder, fromToolUse, lastReplyFromLines, excerpt } = require('../asks');
+const { pendingFromLines, transcriptPath, projectFolder, fromToolUse, lastReplyFromLines, excerpt, fullText } = require('../asks');
 const { claudeSessions } = require('../sources');
 
 // Synthetic transcript lines: nothing here comes from a real session.
@@ -135,4 +135,12 @@ test('a Claude session carries its desktop host id only in the form the app acce
   assert.strictEqual(by.S1.host, 'local_3254948c-279c-4a07-99cf-e11ca13031ba');
   assert.strictEqual(by.S2.host, undefined);
   assert.strictEqual(by.S3.host, undefined);
+});
+
+test('fullText keeps the whole reply with its paragraphs and drops only the markdown marks', () => {
+  const md = '# Title\n\nFirst **bold** paragraph.\n\n- one\n- two\n\n```js\nfoo();\n```\n\nSee [docs](http://x.y).';
+  assert.strictEqual(fullText(md), 'Title\n\nFirst bold paragraph.\n\n• one\n• two\n\nfoo();\n\nSee docs.');
+  const long = fullText('line\n'.repeat(5000), 100);
+  assert.ok(long.length <= 101 && long.endsWith('…'));
+  assert.ok(fullText('x '.repeat(1000)).length > 320); // not clipped to the old excerpt size
 });

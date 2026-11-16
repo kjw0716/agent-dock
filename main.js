@@ -7,6 +7,7 @@ const { execFile } = require('child_process');
 const { collect, AGENTS } = require('./sources');
 const { Channel } = require('./channel');
 const { UnreadTracker } = require('./unread');
+const { FocusReader } = require('./focus');
 const pluginInstall = require('./plugin-install');
 const { installedIds } = require('./agents');
 
@@ -36,6 +37,7 @@ const saveUnread = () => {
     fs.writeFileSync(UNREAD_FILE, JSON.stringify(unread.list()));
   } catch {}
 };
+const focus = new FocusReader();
 const demoRead = new Set(); // demo mode only: agents whose finished work the user clicked
 const sent = new Map(); // sessionId -> { askId, promptId }: the answer the user clicked for the ask that is open
 let pluginBusy = false;
@@ -312,7 +314,7 @@ async function openChat(agentId, session) {
     }
   }
   if (agentId === 'opencode') {
-    const script = "$p = Get-Process OpenCode -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);' -Name W -Namespace N; [N.W]::ShowWindow($p.MainWindowHandle, 9) | Out-Null; [N.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; 'found' } else { 'none' }";
+    const script = "$p = Get-Process OpenCode -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); [DllImport(\"user32.dll\")] public static extern bool IsIconic(IntPtr h); [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);' -Name W -Namespace N; if ([N.W]::IsIconic($p.MainWindowHandle)) { [N.W]::ShowWindow($p.MainWindowHandle, 9) | Out-Null }; [N.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; 'found' } else { 'none' }";
     return new Promise((resolve) => {
       execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000 }, (err, out) => resolve(!err && /found/.test(String(out))));
     });
@@ -346,6 +348,12 @@ function tick() {
     const sessions = rows.flatMap((r) => r.sessions);
     // Claude and Codex report their state exactly; for the other agents "working" is a guess from file activity, so a run must last a while to count.
     if (unread.update(sessions, Date.now(), (agent) => (agent === 'claude' || agent === 'codex' ? 0 : 30000))) saveUnread();
+    // Opening a chat in the Claude desktop app after it finished counts as reading it, same as a click in the dock.
+    let seen = false;
+    for (const s of sessions) {
+      if (s.agent === 'claude' && s.host && unread.has(s) && !isSending(s.id) && focus.lastFocused(s.host) >= s.since) seen = unread.readSession('claude', s.id) || seen;
+    }
+    if (seen) saveUnread();
     for (const s of sessions) if (unread.has(s)) s.unread = true;
   }
   decorateCards(rows);

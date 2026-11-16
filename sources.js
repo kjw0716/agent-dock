@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { OTHERS, otherSessions } = require('./agents');
-const { inspectSession, excerpt } = require('./asks');
+const { inspectSession, fullText } = require('./asks');
 
 const MIN = 60 * 1000;
 const PRIORITY = { waiting: 0, working: 1, done: 2 };
@@ -112,7 +112,7 @@ function codexReduce(lines) {
         asking = false;
         open.clear();
         at = ts || at;
-        message = t === 'task_complete' && typeof p.last_agent_message === 'string' && p.last_agent_message.trim() ? excerpt(p.last_agent_message) : null;
+        message = t === 'task_complete' && typeof p.last_agent_message === 'string' && p.last_agent_message.trim() ? fullText(p.last_agent_message) : null;
       } else if (ASK_EVENT.test(t)) {
         asking = true;
         at = ts || at;

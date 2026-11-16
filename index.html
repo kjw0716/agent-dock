@@ -135,7 +135,8 @@
   .ask-note { margin-top: 7px; font-size: 11px; color: var(--muted); }
   .ask.fin { background: rgba(61, 220, 151, .07); border-color: rgba(61, 220, 151, .28); }
   .ask.fin .ask-q { font-weight: 600; }
-  .ask-recap.full { max-height: 7.2em; }
+  /* a finished turn's whole reply: a few lines tall, scrolls for the rest */
+  .ask-recap.full { max-height: 11.5em; overflow-y: auto; overflow-x: hidden; white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 4px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .28) transparent; cursor: text; }
   .ask-note a { color: var(--text); cursor: pointer; text-decoration: underline; }
   .ask-note.bad { color: #ff9b8f; }
   .ask-note.ok { color: var(--done); }
@@ -331,6 +332,9 @@ function renderStatus(el) {
     el.innerHTML = '<div class="empty">' + t('empty') + '</div>';
     return;
   }
+  // the redraw runs about once a second: keep how far each long reply was scrolled
+  const scrolled = new Map();
+  el.querySelectorAll('.ask-recap.full').forEach((n) => { const c = n.closest('.ask'); if (n.scrollTop) scrolled.set(c.dataset.sid + '|' + c.dataset.aid, n.scrollTop); });
   el.innerHTML = rows.map((r) => {
     const multi = r.sessions.length > 1;
     const list = r.sessions.map((s) =>
@@ -346,6 +350,7 @@ function renderStatus(el) {
       ${r.sessions.filter((x) => x.ask).slice(0, 2).map(askCard).join('')}${replyCards(r)}
       <div class="list">${list}</div></div>`;
   }).join('');
+  el.querySelectorAll('.ask-recap.full').forEach((n) => { const c = n.closest('.ask'); const v = scrolled.get(c.dataset.sid + '|' + c.dataset.aid); if (v) n.scrollTop = v; });
   restoreDrafts();
 }
 
