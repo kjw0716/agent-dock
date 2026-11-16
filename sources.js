@@ -69,6 +69,8 @@ function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks, inspect
       state,
       since,
       dim: state === 'done' && now - since > DONE_DIM_AFTER,
+      // The Claude desktop app's own id for this session; its claude://code/continue link only takes this form.
+      ...(typeof d.hostSessionId === 'string' && /^local_[A-Za-z0-9-]{1,64}$/.test(d.hostSessionId) ? { host: d.hostSessionId } : {}),
       ...(ask ? { ask } : {}),
       ...(state === 'done' && reply ? { reply } : {}),
     });

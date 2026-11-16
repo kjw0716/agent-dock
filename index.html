@@ -555,12 +555,12 @@ document.getElementById('rows').addEventListener('click', async (e) => {
   const readAll = e.target.closest('[data-readall]');
   if (readAll) { window.hud.markRead(readAll.dataset.readall); return; }
   const line = e.target.closest('.s[data-sid]');
-  if (line && jumpOn && JUMP[line.dataset.agent]) { window.hud.openChat(line.dataset.agent, line.dataset.sid); return; }
+  if (line && jumpOn && JUMP[line.dataset.agent] && (await window.hud.openChat(line.dataset.agent, line.dataset.sid))) return;
   const row = e.target.closest('.row');
   if (!row) return;
   const id = row.dataset.id;
   const only = rows.find((x) => x.id === id);
-  if (jumpOn && JUMP[id] && only && only.sessions.length === 1) { window.hud.openChat(id, only.sessions[0].id); return; } // one session: go straight to it
+  if (jumpOn && JUMP[id] && only && only.sessions.length === 1 && (await window.hud.openChat(id, only.sessions[0].id))) return; // one session: go straight to it; if it cannot be opened, expand as usual
   if (row.classList.contains('unread')) window.hud.markRead(id); // looking at it counts as reading it
   open.has(id) ? open.delete(id) : open.add(id);
   syncExpanded(true); // a click always re-asserts it, even after a manual width drag

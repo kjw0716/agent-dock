@@ -120,3 +120,19 @@ test('an idle Claude session carries its last reply; a busy one does not', () =>
   assert.strictEqual(by.S1.reply.text, 'Finished the report.');
   assert.strictEqual(by.S2.reply, undefined);
 });
+
+test('excerpt keeps snake_case but drops emphasis underscores', () => {
+  assert.strictEqual(excerpt('snake_case and _italic_ and __bold__ words.'), 'snake_case and italic and bold words.');
+});
+
+test('a Claude session carries its desktop host id only in the form the app accepts', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dock-reg3-'));
+  const reg = (pid, sessionId, host) => fs.writeFileSync(path.join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, cwd: 'C:/p', kind: 'interactive', status: 'busy', statusUpdatedAt: 1000, name: 'S' + pid, hostSessionId: host }));
+  reg(1, 'cccccccc-0000-0000-0000-000000000001', 'local_3254948c-279c-4a07-99cf-e11ca13031ba');
+  reg(2, 'cccccccc-0000-0000-0000-000000000002', 'local_x y');
+  reg(3, 'cccccccc-0000-0000-0000-000000000003', undefined);
+  const by = Object.fromEntries(claudeSessions({ dir, now: 9000, alive: () => true, inspect: () => ({ ask: null, reply: null }) }).map((s) => [s.label, s]));
+  assert.strictEqual(by.S1.host, 'local_3254948c-279c-4a07-99cf-e11ca13031ba');
+  assert.strictEqual(by.S2.host, undefined);
+  assert.strictEqual(by.S3.host, undefined);
+});

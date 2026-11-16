@@ -128,7 +128,8 @@ function pendingFromLines(lines) {
 function excerpt(raw, max = 320) {
   let t = String(raw)
     .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/[`*_>#]+/g, '')
+    .replace(/[`*>#]+/g, '')
+    .replace(/(^|\s)_+|_+(?=\s|$|[.,;:!?])/g, '$1') // emphasis marks only: snake_case keeps its underscores
     .replace(/^\s*[-+]\s+/gm, '')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/\s+/g, ' ')

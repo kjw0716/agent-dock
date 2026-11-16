@@ -297,21 +297,35 @@ function decorateCards(rows) {
     }
   }
 }
-// Open the chat of a session in its own app. Claude: the desktop app's claude://code/continue link.
-// OpenCode: bring its window forward. Others: not supported (the card hides the button).
-const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-function openChat(agentId, sessionId) {
-  if (agentId === 'claude' && UUID.test(String(sessionId))) {
-    shell.openExternal('claude://code/continue?session=' + sessionId);
-    return true;
+// Open the chat of a session in its own app; resolves true only when it really opened.
+// Claude: the desktop app's claude://code/continue link, which takes the app's own `local_...` session id
+// (registry hostSessionId; checked against Claude's own pattern). OpenCode: bring its window forward.
+const LOCAL_ID = /^local_[A-Za-z0-9-]{1,64}$/;
+async function openChat(agentId, session) {
+  if (agentId === 'claude') {
+    if (!session || !LOCAL_ID.test(String(session.host))) return false; // a terminal session has no desktop chat
+    try {
+      await shell.openExternal('claude://code/continue?session=' + session.host);
+      return true;
+    } catch {
+      return false;
+    }
   }
   if (agentId === 'opencode') {
-    const script = "$p = Get-Process OpenCode -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);' -Name W -Namespace N; [N.W]::ShowWindow($p.MainWindowHandle, 9) | Out-Null; [N.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null }";
-    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000 }, () => {});
-    return true;
+    const script = "$p = Get-Process OpenCode -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);' -Name W -Namespace N; [N.W]::ShowWindow($p.MainWindowHandle, 9) | Out-Null; [N.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; 'found' } else { 'none' }";
+    return new Promise((resolve) => {
+      execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000 }, (err, out) => resolve(!err && /found/.test(String(out))));
+    });
   }
   return false;
 }
+// An answer the user just sent waits for the plugin to pick it up; marking its card read now would withdraw it.
+const isSending = (sessionId) => {
+  const rec = sent.get(sessionId);
+  if (!rec) return false;
+  const st = channel.state(sessionId, rec.promptId);
+  return !!st && (st.state === 'waiting' || st.state === 'taken');
+};
 const findSession = (id) => {
   for (const r of allRows) for (const s of r.sessions) if (s.id === id) return s;
   return null;
@@ -414,22 +428,28 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('settings:get', () => settingsView());
   ipcMain.handle('settings:set', (_e, p) => setSettings(p || {}));
+  const markRead = (agent, id) => {
+    if (DEMO) {
+      demoRead.add(agent + ':' + id);
+      return;
+    }
+    if (isSending(id)) return; // keep the card until the message has been taken
+    if (unread.readSession(agent, id)) saveUnread();
+  };
   ipcMain.on('dismiss', (_e, req) => {
     // "No reply": this session's finished turn is read.
     const { agent, id } = req || {};
     if (typeof agent !== 'string' || typeof id !== 'string' || !AGENTS.some((a) => a.id === agent)) return;
-    if (DEMO) demoRead.add(agent + ':' + id);
-    else if (unread.readSession(agent, id)) saveUnread();
+    markRead(agent, id);
     lastJson = '';
     tick();
   });
-  ipcMain.handle('open', (_e, req) => {
+  ipcMain.handle('open', async (_e, req) => {
     const { agent, id } = req || {};
     if (typeof agent !== 'string' || typeof id !== 'string' || !AGENTS.some((a) => a.id === agent)) return false;
-    const ok = DEMO ? true : openChat(agent, id);
+    const ok = DEMO ? true : await openChat(agent, findSession(id));
     if (ok) {
-      if (DEMO) demoRead.add(agent + ':' + id);
-      else if (unread.readSession(agent, id)) saveUnread();
+      markRead(agent, id);
       lastJson = '';
       tick();
     }
@@ -440,16 +460,11 @@ app.whenReady().then(() => {
     if (typeof agentId !== 'string' || !AGENTS.some((a) => a.id === agentId)) return;
     if (DEMO) {
       demoRead.add(agentId);
-      lastJson = '';
-      tick();
-      return;
+    } else {
+      for (const r of allRows) if (r.id === agentId) for (const s of r.sessions) if (s.unread) markRead(agentId, s.id);
     }
-    if (unread.readAgent(agentId)) {
-      saveUnread();
-      for (const r of allRows) if (r.id === agentId) for (const s of r.sessions) delete s.unread;
-      lastJson = '';
-      tick();
-    }
+    lastJson = '';
+    tick();
   });
   ipcMain.handle('answer', (_e, req) => {
     const { sessionId, askId, option, custom } = req || {};
