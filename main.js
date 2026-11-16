@@ -289,15 +289,17 @@ const findSession = (id) => {
 
 function tick() {
   let rows;
+  let scanned = true;
   try {
     const cfg0 = readConfig();
     const only = new Set(AGENTS.filter((a) => agentOn(cfg0, a.id)).map((a) => a.id));
     rows = DEMO ? demoRows() : collect({ others: { running, only } });
   } catch {
     rows = [];
+    scanned = false; // a failed scan says nothing about what is unread
   }
   decorateAsks(rows);
-  if (!DEMO) {
+  if (!DEMO && scanned) {
     const sessions = rows.flatMap((r) => r.sessions);
     // Claude and Codex report their state exactly; for the other agents "working" is a guess from file activity, so a run must last a while to count.
     if (unread.update(sessions, Date.now(), (agent) => (agent === 'claude' || agent === 'codex' ? 0 : 30000))) saveUnread();

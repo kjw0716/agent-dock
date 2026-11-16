@@ -32,7 +32,7 @@ class UnreadTracker {
         this.unread.delete(key);
         if (!this.workStart.has(key)) this.workStart.set(key, now);
       } else if (prev === 'working' || prev === 'waiting') {
-        if (now - (this.workStart.get(key) ?? now) >= minWork(s.agent)) this.unread.add(key);
+        if (!s.abandoned && now - (this.workStart.get(key) ?? now) >= minWork(s.agent)) this.unread.add(key);
         this.workStart.delete(key);
       } else if (prev === undefined && this.initial.has(key)) {
         this.unread.add(key); // it was unread before the dock restarted and is still done

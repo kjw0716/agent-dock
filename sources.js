@@ -218,6 +218,7 @@ function codexSessions({ root, now = Date.now(), open = false } = {}) {
         state,
         since,
         dim: state === 'done' && now - since > DONE_DIM_AFTER,
+        ...(state === 'done' && hit.r.running ? { abandoned: true } : {}), // went silent mid-turn: not a finished turn
       };
       if (state === 'done' && now - since > CODEX_HIDE_DONE_AFTER) {
         if (!newestHidden || since > newestHidden.since) newestHidden = session;

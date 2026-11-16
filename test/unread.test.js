@@ -67,3 +67,18 @@ test('minWork: a short or flapping busy spell does not count as unread', () => {
   t.update([s('opencode', 'o', 'done'), c], 41000, minWork); // 34 s of work
   assert.deepStrictEqual(t.list(), ['claude:c', 'opencode:o']);
 });
+
+test('a session that went silent mid-turn (abandoned) is not a finished turn', () => {
+  const t = new UnreadTracker();
+  t.update([s('codex', 'x', 'working')]);
+  t.update([{ ...s('codex', 'x', 'done'), abandoned: true }]);
+  assert.deepStrictEqual(t.list(), []);
+});
+
+test('remembered keys are kept until an update actually runs', () => {
+  const t = new UnreadTracker(['claude:a']);
+  // no update call (a failed scan): nothing was lost
+  assert.deepStrictEqual(t.initial.size, 1);
+  t.update([s('claude', 'a', 'done')]);
+  assert.deepStrictEqual(t.list(), ['claude:a']);
+});
