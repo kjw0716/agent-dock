@@ -100,6 +100,22 @@
   .s em { font-style: normal; color: var(--muted); }
   .s.working b { background: var(--working); } .s.waiting b { background: var(--waiting); } .s.done b { background: var(--done); opacity: .6; }
   .s.dim { opacity: .5; }
+  /* ---- a question waiting for the user ---- */
+  .ask { margin: 0 6px 8px 6px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 176, 32, .09); border: 1px solid rgba(255, 176, 32, .25); -webkit-app-region: no-drag; cursor: default; display: none; }
+  .m-cozy .ask, .m-full .ask, .m-wide .ask, .row.open .ask { display: block; }
+  .ask-q { font-weight: 600; font-size: 13px; line-height: 1.35; user-select: text; }
+  .ask-recap { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.35; max-height: 3.9em; overflow: hidden; user-select: text; }
+  .ask-opts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .ask button { font-size: 12px; padding: 5px 11px; border-radius: 8px; background: rgba(255, 255, 255, .1); }
+  .ask button:hover:not(:disabled) { background: rgba(255, 255, 255, .18); }
+  .ask button:disabled { opacity: .45; cursor: default; }
+  .ask button.primary { background: var(--waiting); color: #1a1405; font-weight: 600; }
+  .ask-custom { display: flex; gap: 6px; margin-top: 8px; }
+  .ask-custom input { flex: 1; min-width: 0; font: inherit; font-size: 12px; color: var(--text); background: rgba(0, 0, 0, .25); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; outline: none; user-select: text; }
+  .ask-custom input:focus { border-color: rgba(255, 176, 32, .6); }
+  .ask-note { margin-top: 7px; font-size: 11px; color: var(--muted); }
+  .ask-note.bad { color: #ff9b8f; }
+  .ask-note.ok { color: var(--done); }
   .empty { color: var(--muted); text-align: center; padding: 14px 0 18px; }
 
   /* ---- layouts by available width ---- */
@@ -164,6 +180,8 @@ const I18N = {
     reset: 'Reset position & size', quit: 'Quit', none: 'No sessions', missing: 'Not found',
     expandAll: 'Expand all', collapseAll: 'Collapse and restore size',
     open: 'Running', recent: 'Recently active', session: 'Session',
+    askPlaceholder: 'Type an answer…', send: 'Send', sending: 'Sending…', sentOk: 'Sent', failed: 'Not sent', answerFromDock: 'Answer from the dock', pluginOn: 'Claude plugin', pluginInstalled: (n) => (n ? 'Installed · ' + n + (n === 1 ? ' session' : ' sessions') + ' ready' : 'Installed · start a new session to use it'), pluginOff: 'Not installed', installing: 'Working…',
+    noteNotInstalled: 'Turn on Answer from the dock in Settings to reply here.', noteNotLoaded: 'This session started before the plugin was installed. Start a new session to reply here.', appOnly: 'Runs inside the Claude app',
     now: 'just now', lessMin: 'under 1 min',
     sessions: (n) => (n === 1 ? '1 session' : n + ' sessions'),
     min: (n) => n + ' min', hour: (n) => n + ' h', minAgo: (n) => n + ' min ago', hourAgo: (n) => n + ' h ago',
@@ -175,6 +193,8 @@ const I18N = {
     reset: '重置位置与大小', quit: '退出', none: '没有会话', missing: '未找到',
     expandAll: '展开全部', collapseAll: '收起并还原大小',
     open: '运行中', recent: '最近活动', session: '会话',
+    askPlaceholder: '输入回答…', send: '发送', sending: '发送中…', sentOk: '已发送', failed: '未发送', answerFromDock: '在窗口里回答', pluginOn: 'Claude 插件', pluginInstalled: (n) => (n ? '已安装 · ' + n + ' 个会话可用' : '已安装 · 新开会话后可用'), pluginOff: '未安装', installing: '处理中…',
+    noteNotInstalled: '在设置里打开「在窗口里回答」后即可在这里回复。', noteNotLoaded: '这个会话在安装插件之前就开始了，新开一个会话即可在这里回复。', appOnly: '这个按钮在 Claude 应用里执行',
     now: '刚刚', lessMin: '不到 1 分钟',
     sessions: (n) => n + ' 个会话',
     min: (n) => n + ' 分钟', hour: (n) => n + ' 小时', minAgo: (n) => n + ' 分钟前', hourAgo: (n) => n + ' 小时前',
@@ -194,6 +214,8 @@ const open = new Set();
 let rows = [];
 let view = 'status';
 let settings = null;
+let pluginWorking = false;
+let pluginError = '';
 let zoom = 1;
 
 /* ------------------------------------------------------------------ mascots
@@ -293,8 +315,63 @@ function renderStatus(el) {
       <div class="head">${mascot(r.id, r.state)}
         <div class="main"><div class="name">${esc(r.name)}${multi ? `<small>${r.sessions.length}</small>` : ''}</div><div class="sub">${esc(lbl(r.top))} · ${stamp(r.top)}</div><div class="counts">${counts}</div></div>
         <div class="chip">${t(r.state)}</div></div>
+      ${r.sessions.filter((x) => x.ask).slice(0, 2).map(askCard).join('')}
       <div class="list">${list}</div></div>`;
   }).join('');
+  restoreDrafts();
+}
+
+
+/* ---- a question waiting for the user (a next-step box of the Claude desktop app) ---- */
+const drafts = new Map(); // "sessionId|askId" -> text typed so far, kept across redraws
+let focused = null; // the draft key whose input had the focus
+const draftKey = (sid, aid) => sid + '|' + aid;
+function askNote(a) {
+  if (a.sent) {
+    if (a.sent.state === 'sending') return `<div class="ask-note">${t('sending')}</div>`;
+    if (a.sent.state === 'sent') return `<div class="ask-note ok">${t('sentOk')}</div>`;
+    if (a.sent.state === 'failed') return `<div class="ask-note bad">${t('failed')}${a.sent.reason ? ' · ' + esc(String(a.sent.reason).slice(0, 80)) : ''}</div>`;
+  }
+  if (a.note === 'not-installed') return `<div class="ask-note">${t('noteNotInstalled')}</div>`;
+  if (a.note === 'not-loaded') return `<div class="ask-note">${t('noteNotLoaded')}</div>`;
+  return '';
+}
+function askCard(s) {
+  const a = s.ask;
+  const busy = a.sent && (a.sent.state === 'sending' || a.sent.state === 'sent');
+  const can = a.canAnswer && !busy;
+  const opts = a.options.map((o, i) => {
+    const appOnly = o.appAction && !o.message;
+    return `<button class="${i === 0 && !appOnly ? 'primary' : ''}" data-opt="${i}" ${can && !appOnly ? '' : 'disabled'} title="${appOnly ? esc(t('appOnly')) : ''}">${esc(o.label)}</button>`;
+  }).join('');
+  const key = draftKey(s.id, a.id);
+  return `<div class="ask" data-sid="${esc(s.id)}" data-aid="${esc(a.id)}">
+    <div class="ask-q">${esc(a.question)}</div>${a.recap ? `<div class="ask-recap">${esc(a.recap)}</div>` : ''}
+    <div class="ask-opts">${opts}</div>
+    <div class="ask-custom"><input data-key="${esc(key)}" placeholder="${esc(t('askPlaceholder'))}" maxlength="2000" ${can ? '' : 'disabled'}><button data-send ${can ? '' : 'disabled'}>${t('send')}</button></div>
+    ${askNote(a)}</div>`;
+}
+function restoreDrafts() {
+  document.querySelectorAll('.ask-custom input').forEach((el) => {
+    const v = drafts.get(el.dataset.key);
+    if (v) el.value = v;
+    if (focused === el.dataset.key && !el.disabled) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  });
+}
+async function sendAnswer(card, body) {
+  if (card.dataset.busy) return; // one answer per question: a double click or Enter after Send must not send twice
+  card.dataset.busy = '1';
+  card.querySelectorAll('button, input').forEach((el) => { el.disabled = true; });
+  const res = await window.hud.answer({ sessionId: card.dataset.sid, askId: card.dataset.aid, ...body });
+  if (!res.ok) {
+    delete card.dataset.busy; // let the user try again
+    card.querySelectorAll('button, input').forEach((el) => { el.disabled = false; });
+    const note = card.querySelector('.ask-note') || card.appendChild(Object.assign(document.createElement('div'), { className: 'ask-note' }));
+    note.className = 'ask-note bad';
+    note.textContent = t('failed') + (res.error && res.error !== 'closed' ? ' · ' + res.error : '');
+  } else {
+    drafts.delete(draftKey(card.dataset.sid, card.dataset.aid));
+  }
 }
 
 function renderSettings(el) {
@@ -303,10 +380,12 @@ function renderSettings(el) {
   const agent = (a) => `<div class="opt${a.on ? '' : ' off'}${a.found ? '' : ' missing'}" data-agent="${a.id}">${mascot(a.id, 'static')}
     <div><div class="t">${esc(a.name)}</div><div class="d">${a.found ? (a.count ? t('sessions', a.count) : t('none')) : t('missing')}</div></div>${sw(a.on)}</div>`;
   const seg = (code, name) => `<button class="seg${settings.lang === code ? ' on' : ''}" data-lang="${code}">${name}</button>`;
-  el.innerHTML = `<div class="sect">${t('agents')}</div>${settings.agents.map(agent).join('')}
-    <div class="sect">${t('general')}</div>
+  el.innerHTML = `<div class="sect">${t('answerFromDock')}</div>
+    <div class="opt plain" data-plugin="1"><div><div class="t">${t('pluginOn')}</div><div class="d">${settings.plugin.busy || pluginWorking ? t('installing') : settings.plugin.installed ? t('pluginInstalled', settings.plugin.loaded) : t('pluginOff')}</div>${pluginError ? `<div class="d" style="color:#ff9b8f">${esc(pluginError)}</div>` : ''}</div>${sw(settings.plugin.installed)}</div>
+    <div class="sect">${t('agents')}</div>${settings.agents.map(agent).join('')}
     <div class="opt plain" data-opt="onTop"><div class="t">${t('onTop')}</div>${sw(settings.onTop)}</div>
     <div class="opt plain" data-opt="autostart"><div class="t">${t('autostart')}</div>${sw(settings.autostart)}</div>
+    <div class="sect">${t('general')}</div>
     <div class="opt plain"><div class="t">${t('language')}</div><div class="segs">${seg('en', 'English')}${seg('zh', '中文')}</div></div>
     <div class="btns"><button data-act="reset">${t('reset')}</button><button class="quit" data-act="quit">${t('quit')}</button></div>`;
 }
@@ -371,8 +450,41 @@ document.getElementById('toggle').addEventListener('click', async () => {
   render();
 });
 
+document.getElementById('rows').addEventListener('input', (e) => {
+  if (e.target.matches('.ask-custom input')) drafts.set(e.target.dataset.key, e.target.value);
+});
+document.getElementById('rows').addEventListener('focusin', (e) => { focused = e.target.matches('.ask-custom input') ? e.target.dataset.key : null; });
+document.getElementById('rows').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('.ask-custom input') && e.target.value.trim()) {
+    const card = e.target.closest('.ask');
+    sendAnswer(card, { custom: e.target.value });
+  }
+});
 document.getElementById('rows').addEventListener('click', async (e) => {
+  const card = e.target.closest('.ask');
+  if (card) {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    if (b.dataset.opt !== undefined) sendAnswer(card, { option: Number(b.dataset.opt) });
+    else if (b.hasAttribute('data-send')) {
+      const input = card.querySelector('input');
+      if (input.value.trim()) sendAnswer(card, { custom: input.value });
+    }
+    return; // clicks inside a question never open or close the row
+  }
   if (view === 'settings') {
+    if (e.target.closest('[data-plugin]')) {
+      if (pluginWorking) return;
+      pluginWorking = true;
+      pluginError = '';
+      render();
+      const r = await window.hud.setPlugin(!settings.plugin.installed);
+      pluginWorking = false;
+      if (!r.ok) pluginError = (r.step ? r.step + ': ' : '') + (r.error || 'failed');
+      settings = await window.hud.getSettings();
+      render();
+      return;
+    }
     const a = e.target.closest('[data-agent]');
     const o = e.target.closest('[data-opt]');
     const b = e.target.closest('[data-act]');

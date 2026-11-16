@@ -16,7 +16,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0 license"></a>
   <img src="https://img.shields.io/badge/agents-27-8A63D2" alt="27 agents">
   <img src="https://img.shields.io/badge/tests-passing-3DDC97" alt="Tests passing">
-  <img src="https://img.shields.io/badge/read--only-no%20config%20changes-F2B705" alt="Read-only: changes no agent configuration">
+  <img src="https://img.shields.io/badge/read--only-unless%20you%20opt%20in-F2B705" alt="Read-only unless you turn on the Claude plugin">
 </p>
 
 <p align="center">
@@ -49,7 +49,8 @@ No quotas, no token charts, nothing to configure first. It only reads files your
 - **Per-state counts.** `Working 2 · Waiting 1 · Done 5` for every agent.
 - **Pick your agents.** Settings lists every supported agent, installed ones first, with a switch for each.
 - **English and 中文.** English is the default; switch in Settings.
-- **Read-only.** It never edits an agent's configuration and sends nothing anywhere.
+- **Answer from the dock.** A question Claude's desktop app is waiting on shows up with its buttons and a text field; click, and the answer goes into that session (optional Claude plugin, off by default).
+- **Read-only by default.** It never edits an agent's configuration and sends nothing anywhere; only the optional Claude plugin, which you turn on yourself, adds one plugin to Claude.
 - **Desktop shortcut** with a global start key (`Ctrl+Alt+H`).
 
 ## Quick start
@@ -116,8 +117,32 @@ Claude Code and Codex have dedicated readers. All other agents share one reader 
 *Waiting* needs an agent that exposes it. Only Claude Code and Codex do, so every other agent shows Working or Done.
 Paths marked "not yet" are untested here. If one is wrong, it is one line in [`agents.js`](agents.js).
 
+## Answer from the dock
+
+When Claude's desktop app ends a turn with a question box (a next-step box, or an offer to start a new session), that question appears in the dock with its buttons and a text field. Click an answer or type your own: it is sent to that session as your next message.
+
+<p align="center">
+  <img src="docs/states.png" alt="A question from Claude in the dock, with two answer buttons and a text field" width="380">
+</p>
+
+This needs a small Claude Code plugin that delivers the message into the session. It is **off by default**: turn on **Claude plugin** at the top of Settings, and the dock runs Claude's own CLI for you:
+
+```powershell
+claude plugin marketplace add ~/.agent-dock/claude-plugin
+claude plugin install agent-dock@agent-dock --scope user
+```
+
+Turn the switch off to remove it again (`claude plugin uninstall` and `claude plugin marketplace remove`). Nothing else in your Claude settings is changed, and other plugins, including the original Agent HUD's, are left alone.
+
+- **What the plugin does:** every 5 seconds it writes a note saying "this session can take an answer" into `~/.agent-dock/channel/sessions/`; every second it looks in `~/.agent-dock/channel/prompts/<session>/` for an answer you clicked, and submits it as your next message once the session is idle. It touches nothing else.
+- **Already-open sessions:** a session that started before the install has not loaded the plugin. The card says so; start a new session to answer there.
+- **Safety:** an answer goes only to the session that asked. If the question closes before the plugin has picked the answer up (a second or so), the dock withdraws it; once picked up it is submitted as soon as the session is idle, so typing in Claude at that same moment could deliver both. Answers lapse after two minutes, only one answer per question is accepted, and text starting with `/`, `!` or `#` is refused, as are control characters. Anyone who can write to `~/.agent-dock/channel` could send messages into your Claude sessions, so keep that folder private (it lives in your user profile).
+- **What is verified:** the whole round trip (check-in, answer, delivery as the user's message) works in headless Claude Code sessions loaded with the plugin, and installing and removing it works against a scratch Claude configuration. Sessions of the Claude desktop app itself have not been tested here.
+- **Not covered yet:** Claude's tool-permission prompts and the multiple-choice AskUserQuestion tool still have to be answered in Claude.
+
 ## How it works
 
+- **Questions:** for a Claude session that is idle, the dock reads the end of its transcript; a next-step box or session offer after your last real message means it is waiting for you, and its question and buttons are shown. Only the parsed tool call is used, never other transcript text.
 - **Claude Code** keeps a registry file per running process. Agent Dock reads its `status`, drops entries whose process is gone, and maps `busy → Working`, `waiting → Waiting`, `idle → Done`.
 - **Codex** writes one JSON line per event. Agent Dock reads the tail of the newest session files: `task_started` is Working, `task_complete` or `turn_aborted` is Done, an unanswered question or approval is Waiting. A working turn that has been silent for 30 minutes counts as Done; a pending question or approval stays Waiting.
 - **Everyone else:** session files written in the last 12 seconds mean Working. An open app, or activity in the last 6 hours, means Done. Anything older is hidden.
@@ -128,9 +153,9 @@ Claude's `waiting` field is not a documented interface and may change between Cl
 ## Your data
 
 - Nothing leaves your computer. There are no network requests.
-- Nothing in an agent's own configuration is changed or installed.
-- Agent Dock writes two small files to `~/.agent-dock/`: `config.json` (position, width, enabled agents, language) and `state.json` (the last state it showed).
-- Message contents are never shown. The only text taken from an agent is the session name (or the project folder name when there is none), plus event types and timestamps.
+- Nothing in an agent's own configuration is changed. The one exception is the optional Claude plugin, installed only when you turn its switch on (see above).
+- Agent Dock writes to `~/.agent-dock/`: `config.json` (position, width, enabled agents, language) and `state.json` (the last state it showed, without any question text), plus `channel/` and `claude-plugin/` once you turn on the Claude plugin.
+- Agent messages are never read for display. The text taken from an agent is the session name (or the project folder name when there is none), event types and timestamps, and, for a question Claude is waiting on, the question, its summary and its buttons, as written in that tool call.
 
 ## Configuration
 
@@ -161,6 +186,7 @@ test/          node:test suites
 ## Roadmap
 
 - Verify more agents' paths on real machines, and report Waiting where an agent exposes it.
+- Answer Claude's tool-permission prompts and AskUserQuestion questions from the dock.
 - Jump back to an agent's window from its row.
 - Optional sound or toast when an agent starts waiting for you.
 

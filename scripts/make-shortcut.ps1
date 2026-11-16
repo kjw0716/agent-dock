@@ -18,9 +18,9 @@ function New-Link($path) {
   $l
 }
 $desktop = [Environment]::GetFolderPath('Desktop')
-$old = @((Join-Path $desktop 'Agent HUD.lnk'), (Join-Path ([Environment]::GetFolderPath('Programs')) 'Agent HUD.lnk'))
-$old | Where-Object { Test-Path $_ } | Remove-Item -Force  # shortcuts from before the rename
 if (-not $desktop) { throw 'Could not find the Desktop folder' }
+# Only 'Agent Dock.lnk' is created or replaced. Another program's shortcuts (for example the
+# original Agent HUD's 'Agent HUD.lnk') are never touched.
 $d = New-Link (Join-Path $desktop 'Agent Dock.lnk')
 $d.Hotkey = 'CTRL+ALT+H'; $d.Save()
 "Desktop:    $($d.FullName)"

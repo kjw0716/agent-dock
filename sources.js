@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { OTHERS, otherSessions } = require('./agents');
+const { pendingAsk } = require('./asks');
 
 const MIN = 60 * 1000;
 const PRIORITY = { waiting: 0, working: 1, done: 2 };
@@ -28,7 +29,7 @@ function pidAlive(pid) {
   }
 }
 
-function claudeSessions({ dir, now = Date.now(), alive = pidAlive } = {}) {
+function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks = pendingAsk } = {}) {
   dir = dir || path.join(os.homedir(), '.claude', 'sessions');
   let files = [];
   try {
@@ -46,9 +47,18 @@ function claudeSessions({ dir, now = Date.now(), alive = pidAlive } = {}) {
     }
     if (!d || (d.kind && d.kind !== 'interactive')) continue;
     if (!alive(d.pid)) continue;
-    const state = { busy: 'working', waiting: 'waiting', idle: 'done' }[d.status];
+    let state = { busy: 'working', waiting: 'waiting', idle: 'done' }[d.status];
     if (!state) continue;
-    const since = Number(d.statusUpdatedAt || d.updatedAt) || now;
+    let since = Number(d.statusUpdatedAt || d.updatedAt) || now;
+    // An idle session can still wait for the user: a next-step box in the Claude desktop app.
+    let ask = null;
+    if (state === 'done' && d.sessionId) {
+      ask = asks(d.sessionId, d.cwd);
+      if (ask) {
+        state = 'waiting';
+        since = Math.max(since, ask.at || 0);
+      }
+    }
     out.push({
       agent: 'claude',
       id: d.sessionId || f,
@@ -56,6 +66,7 @@ function claudeSessions({ dir, now = Date.now(), alive = pidAlive } = {}) {
       state,
       since,
       dim: state === 'done' && now - since > DONE_DIM_AFTER,
+      ...(ask ? { ask } : {}),
     });
   }
   return out;

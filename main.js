@@ -5,6 +5,8 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const { collect, AGENTS } = require('./sources');
+const { Channel } = require('./channel');
+const pluginInstall = require('./plugin-install');
 const { installedIds } = require('./agents');
 
 const DEMO = process.argv.includes('--demo');
@@ -17,6 +19,9 @@ if (DATA_DIR === path.join(os.homedir(), '.agent-dock') && !fs.existsSync(DATA_D
   } catch {}
 }
 const CONFIG = path.join(DATA_DIR, 'config.json');
+const channel = new Channel(path.join(DATA_DIR, 'channel'));
+const sent = new Map(); // sessionId -> { askId, promptId }: the answer the user clicked for the ask that is open
+let pluginBusy = false;
 const DEFAULT_W = 312; // 288 panel + 12 transparent margin each side
 const MARGIN = 12;
 const MIN_W = 100;
@@ -79,6 +84,10 @@ function setAutostart(on) {
 
 // ----------------------------------------------------------------- demo
 const DEMO_T0 = Date.now();
+const withAsk = (row, ask) => {
+  row.sessions[0].ask = ask;
+  return row;
+};
 function demoRows() {
   const now = DEMO_T0;
   const s = (agent, label, state, ago, labelKey) => ({ agent, id: agent + (label || labelKey), label, labelKey, state, since: now - ago * 60000, dim: false });
@@ -88,9 +97,10 @@ function demoRows() {
     return { id, name, state: list[0].state, top: list[0], sessions: list };
   };
   const names = Object.fromEntries(AGENTS.map((a) => [a.id, a.name]));
+  const demoAsk = { id: 'demo-ask', kind: 'next_step', question: 'Ship the release now?', recap: 'The tests pass and the build is ready to publish.', options: [{ label: 'Ship it', message: 'Yes, ship it' }, { label: 'Wait', message: 'Hold on, wait' }], at: now };
   const mk = (id, list) => row(id, names[id], list.map(([l, st, ago, k]) => s(id, l, st, ago, k)));
   return [
-    mk('claude', [['sub2api site', 'waiting', 2], ['agent-hud', 'working', 6], ['image pipeline', 'done', 40]]),
+    withAsk(mk('claude', [['sub2api site', 'waiting', 2], ['agent-hud', 'working', 6], ['image pipeline', 'done', 40]]), demoAsk),
     mk('codex', [['canvas', 'working', 3], ['ops', 'done', 20]]),
     mk('opencode', [[null, 'done', 3, 'open']]),
     mk('cursor', [[null, 'working', 0, 'open']]),
@@ -199,7 +209,7 @@ function settingsView() {
     return { id: a.id, name: a.name, on: agentOn(cfg, a.id), found: detected(a.id), count: row ? row.sessions.length : 0, i };
   });
   list.sort((x, y) => Number(y.found) - Number(x.found) || x.i - y.i);
-  return { agents: list, onTop: cfg.onTop !== false, autostart: autostartOn(), lang: lang() };
+  return { agents: list, onTop: cfg.onTop !== false, autostart: autostartOn(), lang: lang(), plugin: { installed: !!pluginInstall.installed(), loaded: channel.loaded().size, busy: pluginBusy } };
 }
 
 function setSettings(p) {
@@ -224,6 +234,38 @@ function setSettings(p) {
 }
 
 // ------------------------------------------------------------------ poll
+// Whether each open question can be answered from here, and how the answer the user clicked is going.
+function decorateAsks(rows) {
+  const loaded = channel.loaded();
+  const installed = !!pluginInstall.installed();
+  const open = new Map();
+  for (const r of rows) {
+    for (const s of r.sessions) {
+      if (!s.ask) continue;
+      open.set(s.id, s.ask.id);
+      const note = DEMO || loaded.has(s.id) ? 'ready' : installed ? 'not-loaded' : 'not-installed';
+      s.ask = { ...s.ask, note, canAnswer: note === 'ready' };
+      const rec = sent.get(s.id);
+      if (rec && rec.askId === s.ask.id) {
+        const st = DEMO ? null : channel.state(s.id, rec.promptId);
+        if (st) s.ask.sent = st.state === 'waiting' || st.state === 'taken' ? { state: 'sending' } : st.state === 'started' ? { state: 'sent' } : st.state === 'refused' ? { state: 'failed', reason: st.reason } : st.state === 'expired' ? { state: 'failed', reason: 'expired' } : undefined;
+      }
+    }
+  }
+  // An answer for a question that is no longer the open one must not be delivered later.
+  for (const [sid, rec] of sent) {
+    if (open.get(sid) !== rec.askId) {
+      const st = channel.state(sid, rec.promptId);
+      if (st && st.state === 'waiting') channel.cancel(sid, rec.promptId);
+      sent.delete(sid);
+    }
+  }
+}
+const findSession = (id) => {
+  for (const r of allRows) for (const s of r.sessions) if (s.id === id) return s;
+  return null;
+};
+
 function tick() {
   let rows;
   try {
@@ -233,6 +275,7 @@ function tick() {
   } catch {
     rows = [];
   }
+  decorateAsks(rows);
   allRows = rows;
   const cfg = readConfig();
   rows = rows.filter((r) => agentOn(cfg, r.id));
@@ -243,7 +286,7 @@ function tick() {
   if (!DEMO) {
     try {
       fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(path.join(DATA_DIR, 'state.json'), JSON.stringify({ at: new Date().toISOString(), rows }, null, 1));
+      fs.writeFileSync(path.join(DATA_DIR, 'state.json'), JSON.stringify({ at: new Date().toISOString(), rows: rows.map((r) => ({ ...r, top: undefined, sessions: r.sessions.map((s) => ({ ...s, ask: s.ask ? { pending: true } : undefined })) })) }, null, 1));
     } catch {}
   }
   shot(rows);
@@ -302,6 +345,45 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('settings:get', () => settingsView());
   ipcMain.handle('settings:set', (_e, p) => setSettings(p || {}));
+  ipcMain.handle('answer', (_e, req) => {
+    const { sessionId, askId, option, custom } = req || {};
+    const s = findSession(sessionId);
+    if (!s || !s.ask || s.ask.id !== askId) return { ok: false, error: 'closed' };
+    if (!s.ask.canAnswer) return { ok: false, error: s.ask.note };
+    const prev = sent.get(sessionId);
+    if (prev && prev.askId === askId) {
+      const st = channel.state(sessionId, prev.promptId);
+      if (st && ['waiting', 'taken', 'started'].includes(st.state)) return { ok: false, error: 'already-sent' }; // one answer per question
+    }
+    let text;
+    if (typeof custom === 'string') text = custom;
+    else {
+      const o = s.ask.options[Number(option)];
+      if (!o || (o.appAction && !o.message)) return { ok: false, error: 'app-only' }; // runs inside the Claude app
+      text = o.message || o.label;
+    }
+    const r = DEMO ? { ok: true, id: 'demo' } : channel.leave({ sessionId, askId, text });
+    if (r.ok) {
+      sent.set(sessionId, { askId, promptId: r.id });
+      lastJson = '';
+      tick();
+    }
+    return r;
+  });
+  // Install or remove the Claude plugin (the user's click in Settings; it runs Claude's own CLI).
+  ipcMain.handle('plugin:set', async (_e, on) => {
+    if (pluginBusy) return { ok: false, error: 'busy' };
+    pluginBusy = true;
+    try {
+      if (on) channel.prepare();
+      const r = on ? await pluginInstall.install(DATA_DIR) : await pluginInstall.uninstall();
+      return r;
+    } finally {
+      pluginBusy = false;
+      lastJson = '';
+      tick();
+    }
+  });
 
   // Width resize from the left or right edge: follow the cursor in the main process (a
   // transparent window has no native resize border on Windows). The height is not the
@@ -339,6 +421,9 @@ app.whenReady().then(() => {
     }, 16);
   });
 
+  if (pluginInstall.installed()) channel.prepare();
+  channel.cleanup();
+  setInterval(() => channel.cleanup(), 3600 * 1000);
   pollProcesses();
   setInterval(pollProcesses, 5000);
   tick();

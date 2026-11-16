@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('hud', {
   size: (h) => ipcRenderer.send('size', h),
   ready: () => ipcRenderer.send('ready'),
   expand: (on) => ipcRenderer.send('expand', !!on),
+  answer: (req) => ipcRenderer.invoke('answer', req),
+  setPlugin: (on) => ipcRenderer.invoke('plugin:set', !!on),
   resize: (dir, on) => ipcRenderer.send('resize', dir, !!on),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
