@@ -45,7 +45,7 @@ No quotas, no token charts, nothing to configure first. It only reads files your
 
 - **One bot per agent.** 27 hand-drawn mascots, each with its own shape and colour.
 - **Resizes with its content.** Drag the left or right edge: the layout changes with the width, from icons only to a full panel with per-state counts. The height always follows the content, so nothing is cut off and there is no empty space.
-- **Click a row to open it.** The window grows to show that agent's sessions. Close the rows and it returns to exactly the previous size and position.
+- **Click a row to open it.** The window grows to show that agent's sessions. Close the rows and it returns to exactly the previous size and position. Agent rows and session lines light up under the mouse, so you can see what a click will hit.
 - **A raised hand with a count.** The corner of an agent's mascot shows a hand and how many of its sessions are waiting for you; the tray tooltip shows the total.
 - **Unread.** When a Claude or Codex session finishes a turn while the dock is watching, its green ring and check **blink** until you click its row. For the other agents, which are read from file activity, it blinks only when activity that lasted at least 30 seconds stops; that means "activity stopped", not "finished". A Codex turn that goes quiet for 30 minutes and then finishes is not flagged. If something else of that agent is still working, a small blinking green dot marks the mascot instead. The tray tooltip counts unread sessions.
 - **A short summary of what finished.** For Claude and Codex, a finished turn that you have not looked at shows its last message (about three lines) in a green card. Choose **Open chat**, **No reply** (dismiss it), or, for Claude, type a follow-up right there and send it as your next message (it uses the optional Claude plugin, like answering a question).
@@ -191,7 +191,6 @@ test/          node:test suites
 
 - Verify more agents' paths on real machines, and report Waiting where an agent exposes it.
 - Answer Claude's tool-permission prompts and AskUserQuestion questions from the dock.
-- Jump back to an agent's window from its row.
 - Optional sound or toast when an agent starts waiting for you.
 
 ## Credits and license

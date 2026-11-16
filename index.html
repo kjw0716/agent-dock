@@ -48,7 +48,9 @@
   .row + .row { margin-top: 2px; }
   .head { display: grid; grid-template-columns: var(--m) 1fr auto; gap: 10px; align-items: center; padding: 8px 10px 8px 6px; border-radius: 14px; }
   .row .head { cursor: pointer; }
-  .row .head:hover { background: rgba(255, 255, 255, .05); }
+  .row .head { transition: background .12s ease, box-shadow .12s ease; }
+  .row .head:hover { background: rgba(255, 255, 255, .09); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+  .row .head:active { background: rgba(255, 255, 255, .14); }
   .row.dim { opacity: .55; }
 
   /* ---- mascot ---- */
@@ -108,7 +110,10 @@
   /* ---- sessions ---- */
   .list { padding: 0 10px 8px calc(var(--m) + 16px); display: none; }
   .row.open .list { display: block; }
-  .s { display: grid; grid-template-columns: 8px 1fr auto; gap: 8px; align-items: center; padding: 4px 0; font-size: 12px; }
+  .s { display: grid; grid-template-columns: 8px 1fr auto; gap: 8px; align-items: center; padding: 5px 8px; margin: 0 -8px; border-radius: 8px; font-size: 12px; cursor: pointer; transition: background .12s ease, box-shadow .12s ease; }
+  .s:hover { background: rgba(255, 255, 255, .1); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+  .s:hover em { color: var(--text); }
+  .s:active { background: rgba(255, 255, 255, .16); }
   .s b { width: 8px; height: 8px; border-radius: 50%; }
   .s span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .s em { font-style: normal; color: var(--muted); }
