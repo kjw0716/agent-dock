@@ -106,3 +106,16 @@ test('codex: a completed turn carries its last agent message, a restarted turn d
   assert.strictEqual(codexReduce([ev('task_started'), ev('task_complete', {}), ev('task_started')]).message, null);
   assert.strictEqual(codexReduce([ev('task_started'), ev('turn_aborted')]).message, null);
 });
+
+test('claude: a dismissed (or already opened) question no longer makes the session wait', () => {
+  const dir = tmp();
+  write(dir, '1.json', { kind: 'interactive', pid: 1, sessionId: 'q', status: 'idle', cwd: 'C:/x/p', statusUpdatedAt: NOW - 60000, hostSessionId: 'local_q' });
+  const ask = { id: 'ask1', kind: 'next_step', question: 'Ship?', recap: 'ok', options: [], at: NOW - 30000 };
+  const asks = () => ask;
+  assert.strictEqual(claudeSessions({ dir, now: NOW, alive: () => true, asks })[0].state, 'waiting');
+  const skipped = claudeSessions({ dir, now: NOW, alive: () => true, asks, skipAsk: (sid, a) => sid === 'q' && a.id === 'ask1' })[0];
+  assert.strictEqual(skipped.state, 'done');
+  assert.strictEqual(skipped.ask, undefined);
+  assert.strictEqual(skipped.since, NOW - 60000); // not moved forward by the question
+  assert.strictEqual(claudeSessions({ dir, now: NOW, alive: () => true, asks, skipAsk: () => false })[0].state, 'waiting');
+});

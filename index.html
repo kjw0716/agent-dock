@@ -205,7 +205,7 @@ const I18N = {
     reset: 'Reset position & size', quit: 'Quit', none: 'No sessions', missing: 'Not found',
     expandAll: 'Expand all', collapseAll: 'Collapse and restore size',
     open: 'Running', recent: 'Recently active', session: 'Session',
-    finished: 'finished', openChat: 'Open chat', noReply: 'No reply', unread: 'Unread', replyPlaceholder: 'Reply to the agent…', moreUnread: (n) => n + ' more unread', dismissAll: 'Dismiss all', jumpOnClick: 'Open the chat when I click it',
+    finished: 'finished', openChat: 'Open chat', noReply: 'No reply', dismiss: 'Dismiss', unread: 'Unread', replyPlaceholder: 'Reply to the agent…', moreUnread: (n) => n + ' more unread', dismissAll: 'Dismiss all', jumpOnClick: 'Open the chat when I click it',
     askPlaceholder: 'Type an answer…', send: 'Send', sending: 'Sending…', sentOk: 'Sent', failed: 'Not sent', answerFromDock: 'Answer from the dock', pluginOn: 'Claude plugin', pluginInstalled: (n) => (n ? 'Installed · ' + n + (n === 1 ? ' session' : ' sessions') + ' ready' : 'Installed · start a new session to use it'), pluginOff: 'Not installed', installing: 'Working…',
     noteNotInstalled: 'Turn on Answer from the dock in Settings to reply here.', noteNotLoaded: 'This session started before the plugin was installed. Start a new session to reply here.', appOnly: 'Runs inside the Claude app',
     now: 'just now', lessMin: 'under 1 min',
@@ -219,7 +219,7 @@ const I18N = {
     reset: '重置位置与大小', quit: '退出', none: '没有会话', missing: '未找到',
     expandAll: '展开全部', collapseAll: '收起并还原大小',
     open: '运行中', recent: '最近活动', session: '会话',
-    finished: '已完成', openChat: '打开聊天', noReply: '不回复', unread: '未读', replyPlaceholder: '给 Agent 回复…', moreUnread: (n) => '还有 ' + n + ' 个未读', dismissAll: '全部忽略', jumpOnClick: '点一下就打开对应的聊天',
+    finished: '已完成', openChat: '打开聊天', noReply: '不回复', dismiss: '忽略', unread: '未读', replyPlaceholder: '给 Agent 回复…', moreUnread: (n) => '还有 ' + n + ' 个未读', dismissAll: '全部忽略', jumpOnClick: '点一下就打开对应的聊天',
     askPlaceholder: '输入回答…', send: '发送', sending: '发送中…', sentOk: '已发送', failed: '未发送', answerFromDock: '在窗口里回答', pluginOn: 'Claude 插件', pluginInstalled: (n) => (n ? '已安装 · ' + n + ' 个会话可用' : '已安装 · 新开会话后可用'), pluginOff: '未安装', installing: '处理中…',
     noteNotInstalled: '在设置里打开「在窗口里回答」后即可在这里回复。', noteNotLoaded: '这个会话在安装插件之前就开始了，新开一个会话即可在这里回复。', appOnly: '这个按钮在 Claude 应用里执行',
     now: '刚刚', lessMin: '不到 1 分钟',
@@ -381,7 +381,7 @@ function askCard(s) {
   const key = draftKey(s.id, a.id);
   return `<div class="ask" data-agent="claude" data-sid="${esc(s.id)}" data-aid="${esc(a.id)}">
     <div class="ask-q">${esc(a.question)}</div>${a.recap ? `<div class="ask-recap">${esc(a.recap)}</div>` : ''}
-    <div class="ask-opts">${opts}${JUMP.claude ? `<button data-open>${t('openChat')}</button>` : ''}</div>
+    <div class="ask-opts">${opts}${JUMP.claude ? `<button data-open>${t('openChat')}</button>` : ''}<button data-dismiss-ask>${t('dismiss')}</button></div>
     <div class="ask-custom"><input data-key="${esc(key)}" placeholder="${esc(t('askPlaceholder'))}" maxlength="2000" ${can ? '' : 'disabled'}><button data-send ${can ? '' : 'disabled'}>${t('send')}</button></div>
     ${askNote(a)}</div>`;
 }
@@ -535,6 +535,7 @@ document.getElementById('rows').addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b || b.disabled) return;
     if (b.hasAttribute('data-open')) { window.hud.openChat(card.dataset.agent, card.dataset.sid); return; }
+    if (b.hasAttribute('data-dismiss-ask')) { window.hud.dismiss(card.dataset.agent, card.dataset.sid, card.dataset.aid); return; }
     if (b.hasAttribute('data-dismiss')) { window.hud.dismiss(card.dataset.agent, card.dataset.sid); return; }
     if (b.dataset.opt !== undefined) sendAnswer(card, { option: Number(b.dataset.opt) });
     else if (b.hasAttribute('data-send')) {

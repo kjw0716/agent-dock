@@ -38,6 +38,29 @@ const saveUnread = () => {
   } catch {}
 };
 const focus = new FocusReader();
+// Questions the user dismissed in the dock: sessionId -> { askId, at }. Kept across restarts.
+const DISMISSED_FILE = path.join(DATA_DIR, 'dismissed-asks.json');
+const dismissed = new Map((() => {
+  try {
+    const v = JSON.parse(fs.readFileSync(DISMISSED_FILE, 'utf8'));
+    return Array.isArray(v) ? v.filter((e) => Array.isArray(e) && typeof e[0] === 'string' && e[1] && typeof e[1].askId === 'string').slice(-200) : [];
+  } catch {
+    return [];
+  }
+})());
+const saveDismissed = () => {
+  try {
+    while (dismissed.size > 200) dismissed.delete(dismissed.keys().next().value);
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(DISMISSED_FILE, JSON.stringify([...dismissed]));
+  } catch {}
+};
+// A question stops waiting when dismissed here, or when the chat was opened in the Claude app after it was asked.
+const skipAsk = (sessionId, ask, d) => {
+  const rec = dismissed.get(sessionId);
+  if (rec && rec.askId === ask.id) return true;
+  return !!(ask.at && d && typeof d.hostSessionId === 'string' && focus.lastFocused(d.hostSessionId) >= ask.at);
+};
 const demoRead = new Set(); // demo mode only: agents whose finished work the user clicked
 const sent = new Map(); // sessionId -> { askId, promptId }: the answer the user clicked for the ask that is open
 let pluginBusy = false;
@@ -339,7 +362,7 @@ function tick() {
   try {
     const cfg0 = readConfig();
     const only = new Set(AGENTS.filter((a) => agentOn(cfg0, a.id)).map((a) => a.id));
-    rows = DEMO ? demoRows() : collect({ others: { running, only } });
+    rows = DEMO ? demoRows() : collect({ claude: { skipAsk }, others: { running, only } });
   } catch {
     rows = [];
     scanned = false; // a failed scan says nothing about what is unread
@@ -352,6 +375,8 @@ function tick() {
     let seen = false;
     for (const s of sessions) {
       if (!unread.has(s) || isSending(s.id)) continue;
+      const dis = dismissed.get(s.id);
+      if (dis && s.since <= dis.at) { seen = unread.readSession(s.agent, s.id) || seen; continue; } // dismissed its question: nothing new to look at
       // Claude: the chat was brought up in the desktop app; OpenCode: the app marked the chat viewed.
       const at = s.agent === 'claude' ? (s.host ? focus.lastFocused(s.host) : 0) : s.viewedAt || 0;
       if (at && at >= s.since) seen = unread.readSession(s.agent, s.id) || seen;
@@ -449,8 +474,13 @@ app.whenReady().then(() => {
   };
   ipcMain.on('dismiss', (_e, req) => {
     // "No reply": this session's finished turn is read.
-    const { agent, id } = req || {};
+    const { agent, id, askId } = req || {};
     if (typeof agent !== 'string' || typeof id !== 'string' || !AGENTS.some((a) => a.id === agent)) return;
+    if (typeof askId === 'string' && agent === 'claude') {
+      dismissed.delete(id); // re-insert so the newest stay when trimmed
+      dismissed.set(id, { askId, at: Date.now() });
+      saveDismissed();
+    }
     markRead(agent, id);
     lastJson = '';
     tick();

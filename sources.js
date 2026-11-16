@@ -30,7 +30,7 @@ function pidAlive(pid) {
   }
 }
 
-function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks, inspect = inspectSession } = {}) {
+function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks, inspect = inspectSession, skipAsk } = {}) {
   dir = dir || path.join(os.homedir(), '.claude', 'sessions');
   let files = [];
   try {
@@ -58,6 +58,7 @@ function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks, inspect
       const info = asks ? { ask: asks(d.sessionId, d.cwd) } : inspect(d.sessionId, d.cwd);
       ask = info.ask;
       reply = info.reply || null;
+      if (ask && skipAsk && skipAsk(d.sessionId, ask, d)) ask = null; // the user dismissed it or has opened the chat since
       if (ask) {
         state = 'waiting';
         since = Math.max(since, ask.at || 0);
