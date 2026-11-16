@@ -103,10 +103,11 @@ function installedIds(env, fsx = fs) {
  * One pseudo-session per agent that is open or was active recently.
  * `running` is a Set of lowercase executable names currently running.
  */
-function otherSessions({ now = Date.now(), env = {}, running = new Set(), fsx = fs, only } = {}) {
+function otherSessions({ now = Date.now(), env = {}, running = new Set(), fsx = fs, only, skip } = {}) {
   const out = [];
   for (const a of OTHERS) {
     if (only && !only.has(a.id)) continue;
+    if (skip && skip.has(a.id)) continue; // read exactly elsewhere
     let at = 0;
     for (const w of a.watch) at = Math.max(at, newest(resolve(w, env), { fsx }));
     const open = a.exe.some((e) => running.has(e.toLowerCase()));

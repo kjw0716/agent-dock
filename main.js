@@ -347,11 +347,14 @@ function tick() {
   if (!DEMO && scanned) {
     const sessions = rows.flatMap((r) => r.sessions);
     // Claude and Codex report their state exactly; for the other agents "working" is a guess from file activity, so a run must last a while to count.
-    if (unread.update(sessions, Date.now(), (agent) => (agent === 'claude' || agent === 'codex' ? 0 : 30000))) saveUnread();
+    if (unread.update(sessions, Date.now(), (agent, s) => (agent === 'claude' || agent === 'codex' || s.exact ? 0 : 30000))) saveUnread();
     // Opening a chat in the Claude desktop app after it finished counts as reading it, same as a click in the dock.
     let seen = false;
     for (const s of sessions) {
-      if (s.agent === 'claude' && s.host && unread.has(s) && !isSending(s.id) && focus.lastFocused(s.host) >= s.since) seen = unread.readSession('claude', s.id) || seen;
+      if (!unread.has(s) || isSending(s.id)) continue;
+      // Claude: the chat was brought up in the desktop app; OpenCode: the app marked the chat viewed.
+      const at = s.agent === 'claude' ? (s.host ? focus.lastFocused(s.host) : 0) : s.viewedAt || 0;
+      if (at && at >= s.since) seen = unread.readSession(s.agent, s.id) || seen;
     }
     if (seen) saveUnread();
     for (const s of sessions) if (unread.has(s)) s.unread = true;

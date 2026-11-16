@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const { OTHERS, otherSessions } = require('./agents');
 const { inspectSession, fullText } = require('./asks');
+const { OpenCodeReader } = require('./opencode');
 
 const MIN = 60 * 1000;
 const PRIORITY = { waiting: 0, working: 1, done: 2 };
@@ -270,8 +271,25 @@ function summarize(sessions) {
   return rows;
 }
 
+const opencode = new OpenCodeReader();
+
+// OpenCode: its own database says busy / idle / viewed. null when it cannot be read: then agents.js guesses from file activity.
+function opencodeRows(others = {}) {
+  if (others.only && !others.only.has('opencode')) return [];
+  const running = others.running || new Set();
+  const open = ['opencode.exe', 'opencode-cli.exe'].some((e) => running.has(e));
+  const list = opencode.sessions({ now: others.now, open });
+  if (list && !list.length && open) {
+    const now = others.now || Date.now();
+    list.push({ agent: 'opencode', id: 'opencode', label: null, labelKey: 'open', state: 'done', since: now, dim: false });
+  }
+  return list;
+}
+
 function collect(opts = {}) {
-  return summarize([...claudeSessions(opts.claude), ...codexSessions({ ...opts.codex, open: !!(opts.others && opts.others.running && opts.others.running.has('codex.exe')) }), ...otherSessions(opts.others)]);
+  const oc = opencodeRows(opts.others);
+  const others = oc ? { ...opts.others, skip: new Set(['opencode']) } : opts.others;
+  return summarize([...claudeSessions(opts.claude), ...codexSessions({ ...opts.codex, open: !!(opts.others && opts.others.running && opts.others.running.has('codex.exe')) }), ...(oc || []), ...otherSessions(others)]);
 }
 
 module.exports = { claudeSessions, codexSessions, codexReduce, summarize, collect, AGENTS };

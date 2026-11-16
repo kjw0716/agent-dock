@@ -115,7 +115,7 @@ Claude Code and Codex have dedicated readers. All other agents share one reader 
 | --- | --- | :---: | --- |
 | **Claude Code** | `~/.claude/sessions/<pid>.json` (`busy`, `waiting`, `idle`) | ✓ | working, waiting and done |
 | **Codex** | the newest `~/.codex/sessions/**/rollout-*.jsonl` | ✓ (approvals and questions) | working and done; waiting only in unit tests |
-| **OpenCode** | `~/.local/share/opencode/opencode.db` and the app process | – | file location and idle behaviour; working not yet |
+| **OpenCode** | `session_v2` in `~/.local/share/opencode/opencode.db` (busy / idle / viewed marks, read-only), plus the app process | – | working, done and unread checked against the OpenCode desktop app 2.3; needs the optional `better-sqlite3` build for Electron (fetched by `npm install`), otherwise it falls back to a file-activity guess |
 | Kilo Code · MiMo Code · Cursor · GitHub Copilot · Gemini CLI · Antigravity · Grok · DeepSeek · Kimi · Pi · Oh My Pi · OpenClaw · Hermes · Factory Droid · TRAE · Qoder · ZCode · CodeBuddy · WorkBuddy · Qwen Code · Devin · Cline · Roo Code · Goose | each agent's session folder or database, paths taken from the agent-hud-open discovery tables | – | not yet |
 
 *Waiting* needs an agent that exposes it. Only Claude Code and Codex do, so every other agent shows Working or Done.
