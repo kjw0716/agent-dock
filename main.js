@@ -100,7 +100,7 @@ function demoRows() {
   const demoAsk = { id: 'demo-ask', kind: 'next_step', question: 'Ship the release now?', recap: 'The tests pass and the build is ready to publish.', options: [{ label: 'Ship it', message: 'Yes, ship it' }, { label: 'Wait', message: 'Hold on, wait' }], at: now };
   const mk = (id, list) => row(id, names[id], list.map(([l, st, ago, k]) => s(id, l, st, ago, k)));
   return [
-    withAsk(mk('claude', [['sub2api site', 'waiting', 2], ['agent-hud', 'working', 6], ['image pipeline', 'done', 40]]), demoAsk),
+    withAsk(mk('claude', [['sub2api site', 'waiting', 2], ['docs review', 'waiting', 4], ['agent-hud', 'working', 6], ['image pipeline', 'done', 40]]), demoAsk),
     mk('codex', [['canvas', 'working', 3], ['ops', 'done', 20]]),
     mk('opencode', [[null, 'done', 3, 'open']]),
     mk('cursor', [[null, 'working', 0, 'open']]),
@@ -279,6 +279,8 @@ function tick() {
   allRows = rows;
   const cfg = readConfig();
   rows = rows.filter((r) => agentOn(cfg, r.id));
+  const waitingTotal = rows.reduce((n, r) => n + r.sessions.filter((s) => s.state === 'waiting').length, 0);
+  if (tray) tray.setToolTip(waitingTotal ? `Agent Dock · ${waitingTotal} ${lang() === 'zh' ? '个在等你' : 'waiting for you'}` : 'Agent Dock');
   const json = JSON.stringify(rows.map((r) => ({ ...r, top: { ...r.top, since: Math.floor(r.top.since / 1000) } })));
   if (json === lastJson) return;
   lastJson = json;

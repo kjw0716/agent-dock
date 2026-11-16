@@ -46,6 +46,7 @@ No quotas, no token charts, nothing to configure first. It only reads files your
 - **One bot per agent.** 27 hand-drawn mascots, each with its own shape and colour.
 - **Resizes with its content.** Drag the left or right edge: the layout changes with the width, from icons only to a full panel with per-state counts. The height always follows the content, so nothing is cut off and there is no empty space.
 - **Click a row to open it.** The window grows to show that agent's sessions. Close the rows and it returns to exactly the previous size and position.
+- **A raised hand with a count.** The corner of an agent's mascot shows a hand and how many of its sessions are waiting for you; the tray tooltip shows the total.
 - **Per-state counts.** `Working 2 · Waiting 1 · Done 5` for every agent.
 - **Pick your agents.** Settings lists every supported agent, installed ones first, with a switch for each.
 - **English and 中文.** English is the default; switch in Settings.

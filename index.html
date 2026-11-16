@@ -54,6 +54,9 @@
   /* ---- mascot ---- */
   .bot { position: relative; width: var(--m); height: var(--m); }
   .bot svg { position: absolute; inset: 0; overflow: visible; }
+  /* how many sessions of this agent wait for you: a raised hand and the count */
+  .bot .hand { position: absolute; right: -4px; bottom: -4px; display: flex; align-items: center; gap: 1px; height: max(17px, calc(var(--m) * .34)); min-width: max(17px, calc(var(--m) * .34)); padding: 0 max(4px, calc(var(--m) * .08)) 0 max(2px, calc(var(--m) * .05)); border-radius: 999px; background: var(--waiting); color: #1a1405; font-weight: 700; font-size: max(10px, calc(var(--m) * .24)); line-height: 1; box-shadow: 0 0 0 2px #14161b; justify-content: center; }
+  .bot .hand svg { position: static; width: max(10px, calc(var(--m) * .22)); height: max(10px, calc(var(--m) * .22)); fill: #1a1405; flex: none; }
   .ring { fill: none; stroke-width: 2.5; stroke-linecap: round; transform-origin: 50px 50px; }
   .body-g { transform-origin: 50px 50px; }
   .eye { transform-box: fill-box; transform-origin: center; }
@@ -263,7 +266,8 @@ const SPEC = {
 };
 const FALLBACK = { c: ['#a3a9b5', '#7b818c'], body: (f) => `<circle cx="50" cy="50" r="30" fill="${f}"/>` };
 
-function mascot(id, state) {
+const HAND = '<svg viewBox="0 0 24 24"><rect x="6" y="11" width="12" height="9" rx="4"/><rect x="6" y="5" width="2.7" height="10" rx="1.35"/><rect x="9.4" y="2.5" width="2.7" height="12" rx="1.35"/><rect x="12.9" y="3" width="2.7" height="11.5" rx="1.35"/><rect x="16.3" y="5" width="2.7" height="10" rx="1.35"/><rect x="2.6" y="11.5" width="2.7" height="6.5" rx="1.35" transform="rotate(-32 4 14)"/></svg>';
+function mascot(id, state, waiting = 0) {
   const sp = SPEC[id] || FALLBACK;
   const gid = 'g' + id + Math.random().toString(36).slice(2, 6);
   const stops = sp.c.map((c, i) => `<stop offset="${(i / (sp.c.length - 1 || 1)).toFixed(2)}" stop-color="${c}"/>`).join('');
@@ -284,7 +288,7 @@ function mascot(id, state) {
     <g class="body-g">${sp.body('url(#' + gid + ')')}${face}</g>
     <g class="check"><circle cx="84" cy="84" r="13" fill="#14161b"/><circle cx="84" cy="84" r="10" fill="#3ddc97"/>
       <path d="M79 84.5l3.6 3.6 6.4-7.2" fill="none" stroke="#10241b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
-  </svg></div>`;
+  </svg>${waiting > 0 ? `<div class="hand" title="${esc(t('waiting'))} ${waiting}">${HAND}<span>${waiting}</span></div>` : ''}</div>`;
 }
 
 /* ------------------------------------------------------------------ views */
@@ -312,7 +316,7 @@ function renderStatus(el) {
       return `<span class="c-${st}${n ? ' on' : ''}">${t(st)} ${n}</span>`;
     }).join('');
     return `<div class="row ${r.state}${r.top.dim ? ' dim' : ''}${multi ? ' multi' : ''}${open.has(r.id) ? ' open' : ''}" data-id="${r.id}" title="${esc(r.name)} · ${t(r.state)}">
-      <div class="head">${mascot(r.id, r.state)}
+      <div class="head">${mascot(r.id, r.state, countOf(r, 'waiting'))}
         <div class="main"><div class="name">${esc(r.name)}${multi ? `<small>${r.sessions.length}</small>` : ''}</div><div class="sub">${esc(lbl(r.top))} · ${stamp(r.top)}</div><div class="counts">${counts}</div></div>
         <div class="chip">${t(r.state)}</div></div>
       ${r.sessions.filter((x) => x.ask).slice(0, 2).map(askCard).join('')}
