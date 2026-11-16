@@ -99,3 +99,10 @@ test('codex: row stays while the app is open even if every session is old', () =
   assert.strictEqual(empty.length, 1);
   assert.strictEqual(empty[0].labelKey, 'open');
 });
+
+test('codex: a completed turn carries its last agent message, a restarted turn does not', () => {
+  const done = codexReduce([ev('task_started'), ev('task_complete', { last_agent_message: 'Shipped it. **All** green.' })]);
+  assert.strictEqual(done.message, 'Shipped it. All green.');
+  assert.strictEqual(codexReduce([ev('task_started'), ev('task_complete', {}), ev('task_started')]).message, null);
+  assert.strictEqual(codexReduce([ev('task_started'), ev('turn_aborted')]).message, null);
+});

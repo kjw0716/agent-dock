@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { pendingFromLines, transcriptPath, projectFolder, fromToolUse } = require('../asks');
+const { pendingFromLines, transcriptPath, projectFolder, fromToolUse, lastReplyFromLines, excerpt } = require('../asks');
 const { claudeSessions } = require('../sources');
 
 // Synthetic transcript lines: nothing here comes from a real session.
@@ -81,7 +81,7 @@ test('transcript lookup: encoded folder first, then any project folder by sessio
 
 test('an idle Claude session with a pending box is Waiting; a busy one stays Working', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dock-reg-'));
-  const reg = (pid, sessionId, status) => fs.writeFileSync(path.join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, cwd: 'C:\\p', kind: 'interactive', status, statusUpdatedAt: 1000, name: 'S' + pid }));
+  const reg = (pid, sessionId, status) => fs.writeFileSync(path.join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, cwd: 'C:/p', kind: 'interactive', status, statusUpdatedAt: 1000, name: 'S' + pid }));
   reg(1, 'aaaaaaaa-0000-0000-0000-000000000001', 'idle');
   reg(2, 'aaaaaaaa-0000-0000-0000-000000000002', 'idle');
   reg(3, 'aaaaaaaa-0000-0000-0000-000000000003', 'busy');
@@ -91,4 +91,32 @@ test('an idle Claude session with a pending box is Waiting; a busy one stays Wor
   assert.strictEqual(by.S1.ask.question, 'q?');
   assert.strictEqual(by.S2.state, 'done');
   assert.strictEqual(by.S3.state, 'working'); // asks only matter for a session that is idle
+});
+
+const say = (text, extra = {}) => JSON.stringify({ type: 'assistant', uuid: 'u1', timestamp: '2030-01-01T10:00:09Z', message: { role: 'assistant', content: [{ type: 'text', text }], ...extra } });
+
+test('the last reply is the final assistant text after the last real user message', () => {
+  assert.strictEqual(lastReplyFromLines([user('go'), assistant({ type: 'tool_use', id: 'x', name: 'Bash', input: {} })]), null);
+  const r = lastReplyFromLines([user('go'), say('First thought.'), toolResult(), say('All **done**: tests pass.')]);
+  assert.strictEqual(r.text, 'All done: tests pass.');
+  assert.ok(r.id.startsWith('reply:'));
+  assert.strictEqual(lastReplyFromLines([user('go'), say('Old.'), user('next')]), null); // the user spoke again
+});
+
+test('excerpt strips markdown and code, and clips long text at a word', () => {
+  const md = ['## Title', '', 'Use `foo()` and [docs](http://x).', '```js', 'secret()', '```', '- one', '- two'].join(String.fromCharCode(10));
+  assert.strictEqual(excerpt(md), 'Title Use foo() and docs. one two');
+  const long = excerpt('word '.repeat(200), 50);
+  assert.ok(long.length <= 52 && long.endsWith('…'), long);
+});
+
+test('an idle Claude session carries its last reply; a busy one does not', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dock-reg2-'));
+  const reg = (pid, sessionId, status) => fs.writeFileSync(path.join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, cwd: 'C:/p', kind: 'interactive', status, statusUpdatedAt: 1000, name: 'S' + pid }));
+  reg(1, 'bbbbbbbb-0000-0000-0000-000000000001', 'idle');
+  reg(2, 'bbbbbbbb-0000-0000-0000-000000000002', 'busy');
+  const inspect = () => ({ ask: null, reply: { text: 'Finished the report.', at: 5, id: 'reply:1' } });
+  const by = Object.fromEntries(claudeSessions({ dir, now: 9000, alive: () => true, inspect }).map((s) => [s.label, s]));
+  assert.strictEqual(by.S1.reply.text, 'Finished the report.');
+  assert.strictEqual(by.S2.reply, undefined);
 });

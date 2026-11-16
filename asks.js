@@ -122,6 +122,49 @@ function pendingFromLines(lines) {
   return found;
 }
 
+// --- the last reply of a finished turn ------------------------------------
+
+/** A short plain-text excerpt of a model message: markdown marks and extra whitespace removed. */
+function excerpt(raw, max = 320) {
+  let t = String(raw)
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[`*_>#]+/g, '')
+    .replace(/^\s*[-+]\s+/gm, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (t.length > max) {
+    t = t.slice(0, max);
+    t = t.slice(0, Math.max(t.lastIndexOf(' '), max * 0.6)).trim() + '…';
+  }
+  return t;
+}
+
+/** The last assistant text after the final real user turn: { text, at, id }, or null. */
+function lastReplyFromLines(lines) {
+  let reply = null;
+  for (const raw of lines) {
+    let e;
+    try {
+      e = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (isRealUserTurn(e)) {
+      reply = null;
+      continue;
+    }
+    if (e.type !== 'assistant') continue;
+    const content = e.message && e.message.content;
+    if (!Array.isArray(content)) continue;
+    const words = content.filter((b) => b && b.type === 'text' && text(b.text)).map((b) => b.text).join(' ');
+    if (!words.trim()) continue;
+    const at = Date.parse(e.timestamp) || 0;
+    reply = { text: excerpt(words), at, id: 'reply:' + (e.uuid || (e.message && e.message.id) || at) };
+  }
+  return reply;
+}
+
 function readTailLines(file, bytes = TAIL_BYTES, fsx = fs) {
   const fd = fsx.openSync(file, 'r');
   try {
@@ -137,26 +180,34 @@ function readTailLines(file, bytes = TAIL_BYTES, fsx = fs) {
   }
 }
 
-const cache = new Map(); // file -> { mtime, size, ask }
+const cache = new Map(); // file -> { mtime, size, ask, reply }
 
-/** The pending ask of a session, or null. Cached by the transcript's size and modification time. */
-function pendingAsk(sessionId, cwd, opts = {}) {
+/** What a session's transcript says right now: its pending question and its last reply. Cached by size and mtime. */
+function inspectSession(sessionId, cwd, opts = {}) {
+  const none = { ask: null, reply: null };
   const file = transcriptPath(sessionId, cwd, opts);
-  if (!file) return null;
+  if (!file) return none;
   let st;
   try {
     st = fs.statSync(file);
   } catch {
-    return null;
+    return none;
   }
   const hit = cache.get(file);
-  if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return hit.ask;
+  if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return hit;
   let ask = null;
+  let reply = null;
   try {
-    ask = pendingFromLines(readTailLines(file));
+    const lines = readTailLines(file);
+    ask = pendingFromLines(lines);
+    reply = lastReplyFromLines(lines);
   } catch {}
-  cache.set(file, { mtime: st.mtimeMs, size: st.size, ask });
-  return ask;
+  const entry = { mtime: st.mtimeMs, size: st.size, ask, reply };
+  cache.set(file, entry);
+  return entry;
 }
 
-module.exports = { pendingAsk, pendingFromLines, transcriptPath, projectFolder, fromToolUse, WRAP_UP };
+/** The pending ask of a session, or null. */
+const pendingAsk = (sessionId, cwd, opts) => inspectSession(sessionId, cwd, opts).ask;
+
+module.exports = { pendingAsk, inspectSession, lastReplyFromLines, excerpt, pendingFromLines, transcriptPath, projectFolder, fromToolUse, WRAP_UP };

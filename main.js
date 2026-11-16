@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen, shell } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -127,8 +127,14 @@ function demoRows() {
     mk('grok', [[null, 'working', 0, 'open']]),
     mk('kimi', [[null, 'done', 12, 'recent']]),
   ];
-  for (const s of out[1].sessions) if (s.label === 'ops' && !demoRead.has('codex')) s.unread = true; // finished and not looked at yet
-  if (!demoRead.has('opencode')) out[2].sessions[0].unread = true;
+  const finish = (session, agent, text) => {
+    if (demoRead.has(agent) || demoRead.has(agent + ':' + session.id)) return;
+    session.unread = true; // finished and not looked at yet
+    session.reply = { text, at: DEMO_T0, id: 'reply:' + session.id };
+  };
+  finish(out[0].sessions.find((x) => x.label === 'image pipeline'), 'claude', 'Rendered the 12 frames and uploaded them to the shared folder. Two of them still show the old logo, so I regenerated those.');
+  finish(out[1].sessions.find((x) => x.label === 'ops'), 'codex', 'Rotated the certificates on both servers and restarted the proxy. Everything answers on the new ones.');
+  out[2].sessions[0].unread = !demoRead.has('opencode') && !demoRead.has('opencode:' + out[2].sessions[0].id);
   return out;
 }
 
@@ -230,7 +236,7 @@ function settingsView() {
     return { id: a.id, name: a.name, on: agentOn(cfg, a.id), found: detected(a.id), count: row ? row.sessions.length : 0, i };
   });
   list.sort((x, y) => Number(y.found) - Number(x.found) || x.i - y.i);
-  return { agents: list, onTop: cfg.onTop !== false, autostart: autostartOn(), lang: lang(), plugin: { installed: !!pluginInstall.installed(), loaded: channel.loaded().size, busy: pluginBusy } };
+  return { agents: list, onTop: cfg.onTop !== false, autostart: autostartOn(), lang: lang(), jump: cfg.jump !== false, plugin: { installed: !!pluginInstall.installed(), loaded: channel.loaded().size, busy: pluginBusy } };
 }
 
 function setSettings(p) {
@@ -245,6 +251,7 @@ function setSettings(p) {
     win.setAlwaysOnTop(p.onTop, p.onTop ? 'screen-saver' : 'normal');
   }
   if (typeof p.autostart === 'boolean') setAutostart(p.autostart);
+  if (typeof p.jump === 'boolean') patchConfig({ jump: p.jump });
   if (p.lang === 'en' || p.lang === 'zh') {
     patchConfig({ lang: p.lang });
     if (tray) tray.setContextMenu(menu());
@@ -255,25 +262,33 @@ function setSettings(p) {
 }
 
 // ------------------------------------------------------------------ poll
-// Whether each open question can be answered from here, and how the answer the user clicked is going.
-function decorateAsks(rows) {
+// Whether each open card (a question, or the brief reply of a finished turn) can be answered from here,
+// and how the answer the user clicked is going.
+function decorateCards(rows) {
   const loaded = channel.loaded();
   const installed = !!pluginInstall.installed();
   const open = new Map();
   for (const r of rows) {
     for (const s of r.sessions) {
-      if (!s.ask) continue;
-      open.set(s.id, s.ask.id);
-      const note = DEMO || loaded.has(s.id) ? 'ready' : installed ? 'not-loaded' : 'not-installed';
-      s.ask = { ...s.ask, note, canAnswer: note === 'ready' };
+      const key = s.ask ? 'ask' : s.unread && s.reply ? 'reply' : null;
+      if (!key) {
+        delete s.reply; // only what is still unread is shown, and only in memory
+        continue;
+      }
+      const card = s[key];
+      open.set(s.id, card.id);
+      // Only Claude has a way to take words from the dock (the plugin); Codex and the rest can only be dismissed.
+      const can = r.id === 'claude';
+      const note = !can ? 'no-channel' : DEMO || loaded.has(s.id) ? 'ready' : installed ? 'not-loaded' : 'not-installed';
+      s[key] = { ...card, note, canAnswer: note === 'ready' };
       const rec = sent.get(s.id);
-      if (rec && rec.askId === s.ask.id) {
+      if (rec && rec.askId === card.id) {
         const st = DEMO ? null : channel.state(s.id, rec.promptId);
-        if (st) s.ask.sent = st.state === 'waiting' || st.state === 'taken' ? { state: 'sending' } : st.state === 'started' ? { state: 'sent' } : st.state === 'refused' ? { state: 'failed', reason: st.reason } : st.state === 'expired' ? { state: 'failed', reason: 'expired' } : undefined;
+        if (st) s[key].sent = st.state === 'waiting' || st.state === 'taken' ? { state: 'sending' } : st.state === 'started' ? { state: 'sent' } : st.state === 'refused' ? { state: 'failed', reason: st.reason } : st.state === 'expired' ? { state: 'failed', reason: 'expired' } : undefined;
       }
     }
   }
-  // An answer for a question that is no longer the open one must not be delivered later.
+  // An answer for a card that is no longer the open one must not be delivered later.
   for (const [sid, rec] of sent) {
     if (open.get(sid) !== rec.askId) {
       const st = channel.state(sid, rec.promptId);
@@ -281,6 +296,21 @@ function decorateAsks(rows) {
       sent.delete(sid);
     }
   }
+}
+// Open the chat of a session in its own app. Claude: the desktop app's claude://code/continue link.
+// OpenCode: bring its window forward. Others: not supported (the card hides the button).
+const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+function openChat(agentId, sessionId) {
+  if (agentId === 'claude' && UUID.test(String(sessionId))) {
+    shell.openExternal('claude://code/continue?session=' + sessionId);
+    return true;
+  }
+  if (agentId === 'opencode') {
+    const script = "$p = Get-Process OpenCode -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);' -Name W -Namespace N; [N.W]::ShowWindow($p.MainWindowHandle, 9) | Out-Null; [N.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null }";
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000 }, () => {});
+    return true;
+  }
+  return false;
 }
 const findSession = (id) => {
   for (const r of allRows) for (const s of r.sessions) if (s.id === id) return s;
@@ -298,13 +328,13 @@ function tick() {
     rows = [];
     scanned = false; // a failed scan says nothing about what is unread
   }
-  decorateAsks(rows);
   if (!DEMO && scanned) {
     const sessions = rows.flatMap((r) => r.sessions);
     // Claude and Codex report their state exactly; for the other agents "working" is a guess from file activity, so a run must last a while to count.
     if (unread.update(sessions, Date.now(), (agent) => (agent === 'claude' || agent === 'codex' ? 0 : 30000))) saveUnread();
     for (const s of sessions) if (unread.has(s)) s.unread = true;
   }
+  decorateCards(rows);
   allRows = rows;
   const cfg = readConfig();
   rows = rows.filter((r) => agentOn(cfg, r.id));
@@ -325,7 +355,7 @@ function tick() {
   if (!DEMO) {
     try {
       fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(path.join(DATA_DIR, 'state.json'), JSON.stringify({ at: new Date().toISOString(), rows: rows.map((r) => ({ ...r, top: undefined, sessions: r.sessions.map((s) => ({ ...s, ask: s.ask ? { pending: true } : undefined })) })) }, null, 1));
+      fs.writeFileSync(path.join(DATA_DIR, 'state.json'), JSON.stringify({ at: new Date().toISOString(), rows: rows.map((r) => ({ ...r, top: undefined, sessions: r.sessions.map((s) => ({ ...s, ask: s.ask ? { pending: true } : undefined, reply: undefined })) })) }, null, 1));
     } catch {}
   }
   shot(rows);
@@ -384,6 +414,27 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('settings:get', () => settingsView());
   ipcMain.handle('settings:set', (_e, p) => setSettings(p || {}));
+  ipcMain.on('dismiss', (_e, req) => {
+    // "No reply": this session's finished turn is read.
+    const { agent, id } = req || {};
+    if (typeof agent !== 'string' || typeof id !== 'string' || !AGENTS.some((a) => a.id === agent)) return;
+    if (DEMO) demoRead.add(agent + ':' + id);
+    else if (unread.readSession(agent, id)) saveUnread();
+    lastJson = '';
+    tick();
+  });
+  ipcMain.handle('open', (_e, req) => {
+    const { agent, id } = req || {};
+    if (typeof agent !== 'string' || typeof id !== 'string' || !AGENTS.some((a) => a.id === agent)) return false;
+    const ok = DEMO ? true : openChat(agent, id);
+    if (ok) {
+      if (DEMO) demoRead.add(agent + ':' + id);
+      else if (unread.readSession(agent, id)) saveUnread();
+      lastJson = '';
+      tick();
+    }
+    return ok;
+  });
   ipcMain.on('read', (_e, agentId) => {
     // A click on an agent's row: what it finished is read now.
     if (typeof agentId !== 'string' || !AGENTS.some((a) => a.id === agentId)) return;
@@ -403,8 +454,11 @@ app.whenReady().then(() => {
   ipcMain.handle('answer', (_e, req) => {
     const { sessionId, askId, option, custom } = req || {};
     const s = findSession(sessionId);
-    if (!s || !s.ask || s.ask.id !== askId) return { ok: false, error: 'closed' };
-    if (!s.ask.canAnswer) return { ok: false, error: s.ask.note };
+    const isReply = req && req.kind === 'reply';
+    const card = s && (isReply ? s.reply : s.ask);
+    if (!card || card.id !== askId) return { ok: false, error: 'closed' };
+    if (!card.canAnswer) return { ok: false, error: card.note };
+    if (isReply && typeof custom !== 'string') return { ok: false, error: 'text-only' }; // a finished turn has no buttons to send
     const prev = sent.get(sessionId);
     if (prev && prev.askId === askId) {
       const st = channel.state(sessionId, prev.promptId);
@@ -413,7 +467,7 @@ app.whenReady().then(() => {
     let text;
     if (typeof custom === 'string') text = custom;
     else {
-      const o = s.ask.options[Number(option)];
+      const o = card.options && card.options[Number(option)];
       if (!o || (o.appAction && !o.message)) return { ok: false, error: 'app-only' }; // runs inside the Claude app
       text = o.message || o.label;
     }

@@ -82,3 +82,12 @@ test('remembered keys are kept until an update actually runs', () => {
   t.update([s('claude', 'a', 'done')]);
   assert.deepStrictEqual(t.list(), ['claude:a']);
 });
+
+test('readSession clears one session and leaves the other sessions of that agent', () => {
+  const t = new UnreadTracker();
+  t.update([s('claude', 'a', 'working'), s('claude', 'b', 'working')]);
+  t.update([s('claude', 'a', 'done'), s('claude', 'b', 'done')]);
+  assert.strictEqual(t.readSession('claude', 'a'), true);
+  assert.deepStrictEqual(t.list(), ['claude:b']);
+  assert.strictEqual(t.readSession('claude', 'a'), false);
+});

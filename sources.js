@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { OTHERS, otherSessions } = require('./agents');
-const { pendingAsk } = require('./asks');
+const { inspectSession, excerpt } = require('./asks');
 
 const MIN = 60 * 1000;
 const PRIORITY = { waiting: 0, working: 1, done: 2 };
@@ -29,7 +29,7 @@ function pidAlive(pid) {
   }
 }
 
-function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks = pendingAsk } = {}) {
+function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks, inspect = inspectSession } = {}) {
   dir = dir || path.join(os.homedir(), '.claude', 'sessions');
   let files = [];
   try {
@@ -52,8 +52,11 @@ function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks = pendin
     let since = Number(d.statusUpdatedAt || d.updatedAt) || now;
     // An idle session can still wait for the user: a next-step box in the Claude desktop app.
     let ask = null;
+    let reply = null;
     if (state === 'done' && d.sessionId) {
-      ask = asks(d.sessionId, d.cwd);
+      const info = asks ? { ask: asks(d.sessionId, d.cwd) } : inspect(d.sessionId, d.cwd);
+      ask = info.ask;
+      reply = info.reply || null;
       if (ask) {
         state = 'waiting';
         since = Math.max(since, ask.at || 0);
@@ -67,6 +70,7 @@ function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks = pendin
       since,
       dim: state === 'done' && now - since > DONE_DIM_AFTER,
       ...(ask ? { ask } : {}),
+      ...(state === 'done' && reply ? { reply } : {}),
     });
   }
   return out;
@@ -82,6 +86,7 @@ function codexReduce(lines) {
   let running = false;
   let asking = false;
   let at = 0;
+  let message = null;
   const open = new Map(); // call_id -> tool name
   for (const raw of lines) {
     let v;
@@ -98,12 +103,14 @@ function codexReduce(lines) {
         running = true;
         asking = false;
         open.clear();
+        message = null;
         at = ts || at;
       } else if (t === 'task_complete' || t === 'turn_aborted') {
         running = false;
         asking = false;
         open.clear();
         at = ts || at;
+        message = t === 'task_complete' && typeof p.last_agent_message === 'string' && p.last_agent_message.trim() ? excerpt(p.last_agent_message) : null;
       } else if (ASK_EVENT.test(t)) {
         asking = true;
         at = ts || at;
@@ -118,7 +125,7 @@ function codexReduce(lines) {
     }
   }
   const questioned = [...open.values()].some((n) => ASK_CALL.test(n));
-  return { running, waiting: running && (asking || questioned), at };
+  return { running, waiting: running && (asking || questioned), at, message };
 }
 
 function readTail(file, bytes) {
@@ -219,6 +226,7 @@ function codexSessions({ root, now = Date.now(), open = false } = {}) {
         since,
         dim: state === 'done' && now - since > DONE_DIM_AFTER,
         ...(state === 'done' && hit.r.running ? { abandoned: true } : {}), // went silent mid-turn: not a finished turn
+        ...(state === 'done' && !hit.r.running && hit.r.message ? { reply: { text: hit.r.message, at: since, id: 'reply:' + hit.id + ':' + since } } : {}),
       };
       if (state === 'done' && now - since > CODEX_HIDE_DONE_AFTER) {
         if (!newestHidden || since > newestHidden.since) newestHidden = session;

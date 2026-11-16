@@ -67,6 +67,11 @@ class UnreadTracker {
     return any;
   }
 
+  /** Mark one session read (its card was dismissed or its chat opened). */
+  readSession(agentId, sessionId) {
+    return this.unread.delete(keyOf({ agent: agentId, id: sessionId }));
+  }
+
   list() {
     return [...this.unread].sort();
   }

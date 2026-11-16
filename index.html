@@ -128,6 +128,10 @@
   .ask-custom input { flex: 1; min-width: 0; font: inherit; font-size: 12px; color: var(--text); background: rgba(0, 0, 0, .25); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; outline: none; user-select: text; }
   .ask-custom input:focus { border-color: rgba(255, 176, 32, .6); }
   .ask-note { margin-top: 7px; font-size: 11px; color: var(--muted); }
+  .ask.fin { background: rgba(61, 220, 151, .07); border-color: rgba(61, 220, 151, .28); }
+  .ask.fin .ask-q { font-weight: 600; }
+  .ask-recap.full { max-height: 7.2em; }
+  .ask-note a { color: var(--text); cursor: pointer; text-decoration: underline; }
   .ask-note.bad { color: #ff9b8f; }
   .ask-note.ok { color: var(--done); }
   .empty { color: var(--muted); text-align: center; padding: 14px 0 18px; }
@@ -194,6 +198,7 @@ const I18N = {
     reset: 'Reset position & size', quit: 'Quit', none: 'No sessions', missing: 'Not found',
     expandAll: 'Expand all', collapseAll: 'Collapse and restore size',
     open: 'Running', recent: 'Recently active', session: 'Session',
+    finished: 'finished', openChat: 'Open chat', noReply: 'No reply', replyPlaceholder: 'Reply to the agent…', moreUnread: (n) => n + ' more unread', dismissAll: 'Dismiss all', jumpOnClick: 'Open the chat when I click it',
     askPlaceholder: 'Type an answer…', send: 'Send', sending: 'Sending…', sentOk: 'Sent', failed: 'Not sent', answerFromDock: 'Answer from the dock', pluginOn: 'Claude plugin', pluginInstalled: (n) => (n ? 'Installed · ' + n + (n === 1 ? ' session' : ' sessions') + ' ready' : 'Installed · start a new session to use it'), pluginOff: 'Not installed', installing: 'Working…',
     noteNotInstalled: 'Turn on Answer from the dock in Settings to reply here.', noteNotLoaded: 'This session started before the plugin was installed. Start a new session to reply here.', appOnly: 'Runs inside the Claude app',
     now: 'just now', lessMin: 'under 1 min',
@@ -207,6 +212,7 @@ const I18N = {
     reset: '重置位置与大小', quit: '退出', none: '没有会话', missing: '未找到',
     expandAll: '展开全部', collapseAll: '收起并还原大小',
     open: '运行中', recent: '最近活动', session: '会话',
+    finished: '已完成', openChat: '打开聊天', noReply: '不回复', replyPlaceholder: '给 Agent 回复…', moreUnread: (n) => '还有 ' + n + ' 个未读', dismissAll: '全部忽略', jumpOnClick: '点一下就打开对应的聊天',
     askPlaceholder: '输入回答…', send: '发送', sending: '发送中…', sentOk: '已发送', failed: '未发送', answerFromDock: '在窗口里回答', pluginOn: 'Claude 插件', pluginInstalled: (n) => (n ? '已安装 · ' + n + ' 个会话可用' : '已安装 · 新开会话后可用'), pluginOff: '未安装', installing: '处理中…',
     noteNotInstalled: '在设置里打开「在窗口里回答」后即可在这里回复。', noteNotLoaded: '这个会话在安装插件之前就开始了，新开一个会话即可在这里回复。', appOnly: '这个按钮在 Claude 应用里执行',
     now: '刚刚', lessMin: '不到 1 分钟',
@@ -228,6 +234,8 @@ const open = new Set();
 let rows = [];
 let view = 'status';
 let settings = null;
+let jumpOn = true; // a click opens the chat (Settings)
+const JUMP = { claude: true, opencode: true }; // agents whose app the dock can open
 let pluginWorking = false;
 let pluginError = '';
 let zoom = 1;
@@ -321,7 +329,7 @@ function renderStatus(el) {
   el.innerHTML = rows.map((r) => {
     const multi = r.sessions.length > 1;
     const list = r.sessions.map((s) =>
-      `<div class="s ${s.state}${s.dim ? ' dim' : ''}${s.unread ? ' unread' : ''}"><b></b><span>${esc(lbl(s))}</span><em>${t(s.state)} · ${stamp(s)}</em></div>`).join('');
+      `<div class="s ${s.state}${s.dim ? ' dim' : ''}${s.unread ? ' unread' : ''}" data-agent="${r.id}" data-sid="${esc(s.id)}"><b></b><span>${esc(lbl(s))}</span><em>${t(s.state)} · ${stamp(s)}</em></div>`).join('');
     const counts = ['working', 'waiting', 'done'].map((st) => {
       const n = countOf(r, st);
       return `<span class="c-${st}${n ? ' on' : ''}">${t(st)} ${n}</span>`;
@@ -330,7 +338,7 @@ function renderStatus(el) {
       <div class="head">${mascot(r.id, r.state, countOf(r, 'waiting'), r.state !== 'done' && r.sessions.some((x) => x.unread))}
         <div class="main"><div class="name">${esc(r.name)}${multi ? `<small>${r.sessions.length}</small>` : ''}</div><div class="sub">${esc(lbl(r.top))} · ${stamp(r.top)}</div><div class="counts">${counts}</div></div>
         <div class="chip">${t(r.state)}</div></div>
-      ${r.sessions.filter((x) => x.ask).slice(0, 2).map(askCard).join('')}
+      ${r.sessions.filter((x) => x.ask).slice(0, 2).map(askCard).join('')}${replyCards(r)}
       <div class="list">${list}</div></div>`;
   }).join('');
   restoreDrafts();
@@ -360,9 +368,9 @@ function askCard(s) {
     return `<button class="${i === 0 && !appOnly ? 'primary' : ''}" data-opt="${i}" ${can && !appOnly ? '' : 'disabled'} title="${appOnly ? esc(t('appOnly')) : ''}">${esc(o.label)}</button>`;
   }).join('');
   const key = draftKey(s.id, a.id);
-  return `<div class="ask" data-sid="${esc(s.id)}" data-aid="${esc(a.id)}">
+  return `<div class="ask" data-agent="claude" data-sid="${esc(s.id)}" data-aid="${esc(a.id)}">
     <div class="ask-q">${esc(a.question)}</div>${a.recap ? `<div class="ask-recap">${esc(a.recap)}</div>` : ''}
-    <div class="ask-opts">${opts}</div>
+    <div class="ask-opts">${opts}${JUMP.claude ? `<button data-open>${t('openChat')}</button>` : ''}</div>
     <div class="ask-custom"><input data-key="${esc(key)}" placeholder="${esc(t('askPlaceholder'))}" maxlength="2000" ${can ? '' : 'disabled'}><button data-send ${can ? '' : 'disabled'}>${t('send')}</button></div>
     ${askNote(a)}</div>`;
 }
@@ -377,7 +385,7 @@ async function sendAnswer(card, body) {
   if (card.dataset.busy) return; // one answer per question: a double click or Enter after Send must not send twice
   card.dataset.busy = '1';
   card.querySelectorAll('button, input').forEach((el) => { el.disabled = true; });
-  const res = await window.hud.answer({ sessionId: card.dataset.sid, askId: card.dataset.aid, ...body });
+  const res = await window.hud.answer({ sessionId: card.dataset.sid, askId: card.dataset.aid, ...(card.dataset.kind === 'reply' ? { kind: 'reply' } : {}), ...body });
   if (!res.ok) {
     delete card.dataset.busy; // let the user try again
     card.querySelectorAll('button, input').forEach((el) => { el.disabled = false; });
@@ -387,6 +395,28 @@ async function sendAnswer(card, body) {
   } else {
     drafts.delete(draftKey(card.dataset.sid, card.dataset.aid));
   }
+}
+
+
+/* ---- the brief reply of a finished turn: read it, open the chat, dismiss it, or answer right here ---- */
+function replyCards(r) {
+  const list = r.sessions.filter((x) => x.unread && x.reply && !x.ask).sort((a, b) => (b.reply.at || 0) - (a.reply.at || 0));
+  const more = list.length > 3 ? `<div class="ask-note">${t('moreUnread', list.length - 3)} · <a data-readall="${r.id}">${t('dismissAll')}</a></div>` : '';
+  return list.slice(0, 3).map((x) => replyCard(r, x)).join('') + more;
+}
+function replyCard(r, s) {
+  const a = s.reply;
+  const busy = a.sent && (a.sent.state === 'sending' || a.sent.state === 'sent');
+  const can = a.canAnswer && !busy;
+  const input = r.id === 'claude'
+    ? `<div class="ask-custom"><input data-key="${esc(draftKey(s.id, a.id))}" placeholder="${esc(t('replyPlaceholder'))}" maxlength="2000" ${can ? '' : 'disabled'}><button data-send ${can ? '' : 'disabled'}>${t('send')}</button></div>`
+    : '';
+  const open = JUMP[r.id] ? `<button data-open>${t('openChat')}</button>` : '';
+  return `<div class="ask fin" data-kind="reply" data-agent="${r.id}" data-sid="${esc(s.id)}" data-aid="${esc(a.id)}">
+    <div class="ask-q">${esc(lbl(s))} · ${t('finished')}</div>
+    <div class="ask-recap full">${esc(a.text)}</div>
+    <div class="ask-opts">${open}<button data-dismiss>${t('noReply')}</button></div>
+    ${input}${askNote(a)}</div>`;
 }
 
 function renderSettings(el) {
@@ -400,6 +430,7 @@ function renderSettings(el) {
     <div class="sect">${t('agents')}</div>${settings.agents.map(agent).join('')}
     <div class="opt plain" data-opt="onTop"><div class="t">${t('onTop')}</div>${sw(settings.onTop)}</div>
     <div class="opt plain" data-opt="autostart"><div class="t">${t('autostart')}</div>${sw(settings.autostart)}</div>
+    <div class="opt plain" data-opt="jump"><div class="t">${t('jumpOnClick')}</div>${sw(settings.jump)}</div>
     <div class="sect">${t('general')}</div>
     <div class="opt plain"><div class="t">${t('language')}</div><div class="segs">${seg('en', 'English')}${seg('zh', '中文')}</div></div>
     <div class="btns"><button data-act="reset">${t('reset')}</button><button class="quit" data-act="quit">${t('quit')}</button></div>`;
@@ -480,6 +511,8 @@ document.getElementById('rows').addEventListener('click', async (e) => {
   if (card) {
     const b = e.target.closest('button');
     if (!b || b.disabled) return;
+    if (b.hasAttribute('data-open')) { window.hud.openChat(card.dataset.agent, card.dataset.sid); return; }
+    if (b.hasAttribute('data-dismiss')) { window.hud.dismiss(card.dataset.agent, card.dataset.sid); return; }
     if (b.dataset.opt !== undefined) sendAnswer(card, { option: Number(b.dataset.opt) });
     else if (b.hasAttribute('data-send')) {
       const input = card.querySelector('input');
@@ -515,12 +548,19 @@ document.getElementById('rows').addEventListener('click', async (e) => {
       settings = await window.hud.setSettings({ [b.dataset.act]: true });
     } else return;
     lang = settings.lang;
+    jumpOn = settings.jump;
     render();
     return;
   }
+  const readAll = e.target.closest('[data-readall]');
+  if (readAll) { window.hud.markRead(readAll.dataset.readall); return; }
+  const line = e.target.closest('.s[data-sid]');
+  if (line && jumpOn && JUMP[line.dataset.agent]) { window.hud.openChat(line.dataset.agent, line.dataset.sid); return; }
   const row = e.target.closest('.row');
   if (!row) return;
   const id = row.dataset.id;
+  const only = rows.find((x) => x.id === id);
+  if (jumpOn && JUMP[id] && only && only.sessions.length === 1) { window.hud.openChat(id, only.sessions[0].id); return; } // one session: go straight to it
   if (row.classList.contains('unread')) window.hud.markRead(id); // looking at it counts as reading it
   open.has(id) ? open.delete(id) : open.add(id);
   syncExpanded(true); // a click always re-asserts it, even after a manual width drag
@@ -547,6 +587,7 @@ setInterval(refreshTimes, 15000);
 (async () => {
   settings = await window.hud.getSettings();
   lang = settings.lang;
+  jumpOn = settings.jump;
   render();
   window.hud.ready();
 })();

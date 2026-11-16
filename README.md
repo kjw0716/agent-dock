@@ -48,6 +48,8 @@ No quotas, no token charts, nothing to configure first. It only reads files your
 - **Click a row to open it.** The window grows to show that agent's sessions. Close the rows and it returns to exactly the previous size and position.
 - **A raised hand with a count.** The corner of an agent's mascot shows a hand and how many of its sessions are waiting for you; the tray tooltip shows the total.
 - **Unread.** When a Claude or Codex session finishes a turn while the dock is watching, its green ring and check **blink** until you click its row. For the other agents, which are read from file activity, it blinks only when activity that lasted at least 30 seconds stops; that means "activity stopped", not "finished". A Codex turn that goes quiet for 30 minutes and then finishes is not flagged. If something else of that agent is still working, a small blinking green dot marks the mascot instead. The tray tooltip counts unread sessions.
+- **A short summary of what finished.** For Claude and Codex, a finished turn that you have not looked at shows its last message (about three lines) in a green card. Choose **Open chat**, **No reply** (dismiss it), or, for Claude, type a follow-up right there and send it as your next message (it uses the optional Claude plugin, like answering a question).
+- **Open the chat from the dock.** A click can jump to the session's chat (Claude's desktop app, OpenCode's window). It is a switch in Settings; a row with one session opens its chat directly, a row with several expands and a click on one of its sessions opens it.
 - **Per-state counts.** `Working 2 · Waiting 1 · Done 5` for every agent.
 - **Pick your agents.** Settings lists every supported agent, installed ones first, with a switch for each.
 - **English and 中文.** English is the default; switch in Settings.
@@ -157,7 +159,7 @@ Claude's `waiting` field is not a documented interface and may change between Cl
 - Nothing leaves your computer. There are no network requests.
 - Nothing in an agent's own configuration is changed. The one exception is the optional Claude plugin, installed only when you turn its switch on (see above).
 - Agent Dock writes to `~/.agent-dock/`: `config.json` (position, width, enabled agents, language) and `state.json` (the last state it showed, without any question text), plus `channel/` and `claude-plugin/` once you turn on the Claude plugin.
-- Agent messages are never read for display. The text taken from an agent is the session name (or the project folder name when there is none), event types and timestamps, and, for a question Claude is waiting on, the question, its summary and its buttons, as written in that tool call.
+- Agent messages are not read for display except where you see them: the session name (or the project folder name), event types and timestamps, a question Claude is waiting on (its question, summary and buttons), and the last message of a finished Claude or Codex turn that you have not looked at. These texts stay in memory; none of them is written to disk.
 
 ## Configuration
 
