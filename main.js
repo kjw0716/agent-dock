@@ -41,6 +41,7 @@ let win;
 let tray;
 let lastJson = '';
 let lastSig = '';
+let lastTip = '';
 let allRows = []; // before the agent filter
 let contentH = 100; // natural content height, css px
 let resizeTimer = null;
@@ -280,7 +281,11 @@ function tick() {
   const cfg = readConfig();
   rows = rows.filter((r) => agentOn(cfg, r.id));
   const waitingTotal = rows.reduce((n, r) => n + r.sessions.filter((s) => s.state === 'waiting').length, 0);
-  if (tray) tray.setToolTip(waitingTotal ? `Agent Dock · ${waitingTotal} ${lang() === 'zh' ? '个在等你' : 'waiting for you'}` : 'Agent Dock');
+  const tip = waitingTotal ? `Agent Dock · ${waitingTotal} ${cfg.lang === 'zh' ? '个在等你' : 'waiting for you'}` : 'Agent Dock';
+  if (tray && tip !== lastTip) {
+    lastTip = tip; // setting an unchanged tooltip every second can make it flicker
+    tray.setToolTip(tip);
+  }
   const json = JSON.stringify(rows.map((r) => ({ ...r, top: { ...r.top, since: Math.floor(r.top.since / 1000) } })));
   if (json === lastJson) return;
   lastJson = json;
