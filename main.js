@@ -8,6 +8,7 @@ const { collect, AGENTS } = require('./sources');
 const { Channel } = require('./channel');
 const { UnreadTracker } = require('./unread');
 const { FocusReader } = require('./focus');
+const { codexUrl, exesOf, focusWindow } = require('./jump');
 const pluginInstall = require('./plugin-install');
 const { installedIds } = require('./agents');
 
@@ -322,9 +323,10 @@ function decorateCards(rows) {
     }
   }
 }
-// Open the chat of a session in its own app; resolves true only when it really opened.
+// Open the chat of a session in its own app; resolves true only when it really opened (see jump.js).
 // Claude: the desktop app's claude://code/continue link, which takes the app's own `local_...` session id
-// (registry hostSessionId; checked against Claude's own pattern). OpenCode: bring its window forward.
+// (registry hostSessionId; checked against Claude's own pattern). Codex: codex://threads/<id>.
+// OpenCode: its window and then the chat's tab. Everything else: the window of the app or of its terminal.
 const LOCAL_ID = /^local_[A-Za-z0-9-]{1,64}$/;
 async function openChat(agentId, session) {
   if (agentId === 'claude') {
@@ -336,13 +338,18 @@ async function openChat(agentId, session) {
       return false;
     }
   }
-  if (agentId === 'opencode') {
-    const script = "$p = Get-Process OpenCode -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); [DllImport(\"user32.dll\")] public static extern bool IsIconic(IntPtr h); [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);' -Name W -Namespace N; if ([N.W]::IsIconic($p.MainWindowHandle)) { [N.W]::ShowWindow($p.MainWindowHandle, 9) | Out-Null }; [N.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; 'found' } else { 'none' }";
-    return new Promise((resolve) => {
-      execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000 }, (err, out) => resolve(!err && /found/.test(String(out))));
-    });
+  if (agentId === 'codex') {
+    const url = session && codexUrl(session.id);
+    if (url) {
+      try {
+        await shell.openExternal(url);
+        return true;
+      } catch {}
+    }
+    return focusWindow(exesOf('codex'));
   }
-  return false;
+  const title = agentId === 'opencode' && session && session.title ? session.title : '';
+  return focusWindow(exesOf(agentId), title);
 }
 // An answer the user just sent waits for the plugin to pick it up; marking its card read now would withdraw it.
 const isSending = (sessionId) => {
@@ -388,6 +395,7 @@ function tick() {
   allRows = rows;
   const cfg = readConfig();
   rows = rows.filter((r) => agentOn(cfg, r.id));
+  for (const r of rows) r.jump = r.id === 'claude' || r.id === 'codex' || exesOf(r.id).length > 0; // the dock knows how to open its chat or window
   const countAll = (pred) => rows.reduce((n, r) => n + r.sessions.filter(pred).length, 0);
   const waitingTotal = countAll((s) => s.state === 'waiting');
   const unreadTotal = countAll((s) => s.unread);

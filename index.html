@@ -242,7 +242,7 @@ let rows = [];
 let view = 'status';
 let settings = null;
 let jumpOn = true; // a click opens the chat (Settings)
-const JUMP = { claude: true, opencode: true }; // agents whose app the dock can open
+const canJump = (id) => !!(rows.find((x) => x.id === id) || {}).jump; // the main process says which agents it knows how to open
 let pluginWorking = false;
 let pluginError = '';
 let zoom = 1;
@@ -381,7 +381,7 @@ function askCard(s) {
   const key = draftKey(s.id, a.id);
   return `<div class="ask" data-agent="claude" data-sid="${esc(s.id)}" data-aid="${esc(a.id)}">
     <div class="ask-q">${esc(a.question)}</div>${a.recap ? `<div class="ask-recap">${esc(a.recap)}</div>` : ''}
-    <div class="ask-opts">${opts}${JUMP.claude ? `<button data-open>${t('openChat')}</button>` : ''}<button data-dismiss-ask>${t('dismiss')}</button></div>
+    <div class="ask-opts">${opts}<button data-open>${t('openChat')}</button><button data-dismiss-ask>${t('dismiss')}</button></div>
     <div class="ask-custom"><input data-key="${esc(key)}" placeholder="${esc(t('askPlaceholder'))}" maxlength="2000" ${can ? '' : 'disabled'}><button data-send ${can ? '' : 'disabled'}>${t('send')}</button></div>
     ${askNote(a)}</div>`;
 }
@@ -422,7 +422,7 @@ function replyCard(r, s) {
   const input = r.id === 'claude'
     ? `<div class="ask-custom"><input data-key="${esc(draftKey(s.id, a.id))}" placeholder="${esc(t('replyPlaceholder'))}" maxlength="2000" ${can ? '' : 'disabled'}><button data-send ${can ? '' : 'disabled'}>${t('send')}</button></div>`
     : '';
-  const open = JUMP[r.id] ? `<button data-open>${t('openChat')}</button>` : '';
+  const open = canJump(r.id) ? `<button data-open>${t('openChat')}</button>` : '';
   return `<div class="ask fin" data-kind="reply" data-agent="${r.id}" data-sid="${esc(s.id)}" data-aid="${esc(a.id)}">
     <div class="ask-q">${esc(lbl(s))} · ${t('finished')}</div>
     <div class="ask-recap full">${esc(a.text)}</div>
@@ -579,12 +579,12 @@ document.getElementById('rows').addEventListener('click', async (e) => {
   const readAll = e.target.closest('[data-readall]');
   if (readAll) { window.hud.markRead(readAll.dataset.readall); return; }
   const line = e.target.closest('.s[data-sid]');
-  if (line && jumpOn && JUMP[line.dataset.agent] && (await window.hud.openChat(line.dataset.agent, line.dataset.sid))) return;
+  if (line && jumpOn && canJump(line.dataset.agent) && (await window.hud.openChat(line.dataset.agent, line.dataset.sid))) return;
   const row = e.target.closest('.row');
   if (!row) return;
   const id = row.dataset.id;
   const only = rows.find((x) => x.id === id);
-  if (jumpOn && JUMP[id] && only && only.sessions.length === 1 && (await window.hud.openChat(id, only.sessions[0].id))) return; // one session: go straight to it; if it cannot be opened, expand as usual
+  if (jumpOn && canJump(id) && only && only.sessions.length === 1 && (await window.hud.openChat(id, only.sessions[0].id))) return; // one session: go straight to it; if it cannot be opened, expand as usual
   if (row.classList.contains('unread')) window.hud.markRead(id); // looking at it counts as reading it
   open.has(id) ? open.delete(id) : open.add(id);
   syncExpanded(true); // a click always re-asserts it, even after a manual width drag

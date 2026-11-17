@@ -9,7 +9,7 @@
     "postinstall": "node scripts/electron-sqlite.js",
     "start": "electron .",
     "demo": "electron . --demo",
-    "test": "node --test test/sources.test.js test/agents.test.js test/asks.test.js test/channel.test.js test/plugin-install.test.js test/unread.test.js test/focus.test.js test/opencode.test.js",
+    "test": "node --test test/sources.test.js test/agents.test.js test/asks.test.js test/channel.test.js test/plugin-install.test.js test/unread.test.js test/focus.test.js test/opencode.test.js test/jump.test.js",
     "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1"
   },
   "devDependencies": {

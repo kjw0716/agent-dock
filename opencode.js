@@ -50,6 +50,7 @@ function toSessions(rows, { now = Date.now(), open = false } = {}) {
       agent: 'opencode',
       id: String(r.id),
       label: label(r.title, r.directory),
+      title: r.title ? String(r.title) : '', // the tab's own name
       state,
       since,
       dim: state === 'done' && now - since > DIM_AFTER,
