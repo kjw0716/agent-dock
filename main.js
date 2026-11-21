@@ -3,7 +3,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen, shell } = 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { collect, AGENTS } = require('./sources');
 const { Channel } = require('./channel');
 const { UnreadTracker } = require('./unread');
@@ -435,19 +435,54 @@ function shot(rows) {
   }, 600);
 }
 
-// Running executables, listed asynchronously so the resize timer never waits on it.
+// Running executables. Spawning `tasklist` every few seconds from Electron's main process leaked ~23 KB of native
+// memory per spawn (>1 GB after a few days), so one cmd loop prints the list every ~5 s instead. The loop ends by
+// itself after ~1 h (and is then restarted), so a crash of the dock can never leave it running forever.
+let procWatcher = null;
 function pollProcesses() {
-  if (DEMO) return;
-  execFile('tasklist', ['/fo', 'csv', '/nh'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (err, out) => {
-    if (err) return;
-    const names = new Set();
-    for (const line of out.split('\n')) {
-      const m = /^"([^"]+)"/.exec(line);
-      if (m) names.add(m[1].toLowerCase());
+  if (DEMO || procWatcher) return;
+  const loop = 'for /l %i in (1,1,720) do @(tasklist /fo csv /nh & echo @@END@@ & ping -n 6 127.0.0.1 >nul)';
+  let child;
+  try {
+    child = spawn('cmd.exe', ['/d', '/c', loop], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch {
+    return;
+  }
+  procWatcher = child;
+  let buf = '';
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => {
+    buf += chunk;
+    let i;
+    while ((i = buf.indexOf('@@END@@')) !== -1) {
+      const names = new Set();
+      for (const line of buf.slice(0, i).split('\n')) {
+        const m = /^"([^"]+)"/.exec(line);
+        if (m) names.add(m[1].toLowerCase());
+      }
+      if (names.size) running = names;
+      buf = buf.slice(i + 7);
     }
-    running = names;
+    if (buf.length > 1048576) buf = ''; // never grow without a marker
   });
+  const ended = () => {
+    if (procWatcher !== child) return;
+    procWatcher = null;
+    if (!quitting) setTimeout(pollProcesses, 5000);
+  };
+  child.on('error', ended);
+  child.on('exit', ended);
 }
+let quitting = false;
+app.on('before-quit', () => {
+  quitting = true;
+  if (procWatcher) {
+    try {
+      procWatcher.kill();
+      execFile('taskkill', ['/pid', String(procWatcher.pid), '/t', '/f'], { windowsHide: true }, () => {});
+    } catch {}
+  }
+});
 
 // ------------------------------------------------------------------ app
 app.whenReady().then(() => {
@@ -598,7 +633,6 @@ app.whenReady().then(() => {
   channel.cleanup();
   setInterval(() => channel.cleanup(), 3600 * 1000);
   pollProcesses();
-  setInterval(pollProcesses, 5000);
   tick();
   setInterval(tick, POLL_MS);
 });
