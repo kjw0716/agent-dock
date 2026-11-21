@@ -1,6 +1,6 @@
 {
   "name": "agent-dock",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A small always-on-top Windows HUD: is each coding agent working, waiting for you, or done?",
   "main": "main.js",
   "private": true,
@@ -10,10 +10,12 @@
     "start": "electron .",
     "demo": "electron . --demo",
     "test": "node --test test/sources.test.js test/agents.test.js test/asks.test.js test/channel.test.js test/plugin-install.test.js test/unread.test.js test/focus.test.js test/opencode.test.js test/jump.test.js",
-    "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1"
+    "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1",
+    "dist": "electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^26.18.0"
   },
   "keywords": [
     "windows",
@@ -41,5 +43,52 @@
   },
   "optionalDependencies": {
     "better-sqlite3": "^11.10.0"
+  },
+  "build": {
+    "appId": "com.kjw0716.agentdock",
+    "productName": "Agent Dock",
+    "asar": false,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "agents.js",
+      "asks.js",
+      "channel.js",
+      "focus.js",
+      "jump.js",
+      "opencode.js",
+      "plugin-install.js",
+      "sources.js",
+      "unread.js",
+      "assets/**",
+      "claude-plugin/**",
+      "package.json",
+      "LICENSE",
+      "NOTICE"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Agent-Dock-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Agent Dock"
+    }
   }
 }

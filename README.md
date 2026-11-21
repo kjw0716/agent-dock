@@ -57,7 +57,11 @@ No quotas, no token charts, nothing to configure first. It only reads files your
 - **Read-only by default.** It never edits an agent's configuration and sends nothing anywhere; only the optional Claude plugin, which you turn on yourself, adds one plugin to Claude.
 - **Desktop shortcut** with a global start key (`Ctrl+Alt+H`).
 
-## Quick start
+## Download
+
+Get `Agent-Dock-Setup-<version>.exe` from the [latest release](https://github.com/kjw0716/agent-dock/releases/latest) and run it. It installs for the current user (no admin rights) and adds a Start menu shortcut. The installer is not code-signed, so Windows SmartScreen may show "Windows protected your PC": choose **More info** > **Run anyway**.
+
+## Run from source
 
 You need Windows 10 or 11, [Node.js](https://nodejs.org/) 20 or newer and Git. (The screenshot script `scripts/shoot.js` needs Node 22 or newer.)
 

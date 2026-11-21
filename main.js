@@ -119,10 +119,10 @@ function setAutostart(on) {
     fs.rmSync(path.join(path.dirname(startupFile()), 'agent-hud-win.vbs'), { force: true }); // old name
     if (!on) return fs.rmSync(startupFile(), { force: true });
     const q = (s) => s.replace(/"/g, '""');
-    fs.writeFileSync(
-      startupFile(),
-      `Set sh = CreateObject("WScript.Shell")\r\nsh.CurrentDirectory = "${q(__dirname)}"\r\nsh.Run """${q(process.execPath)}"" .", 0, False\r\n`,
-    );
+    // Installed build: run the exe itself. From source: run electron on this folder.
+    const dir = app.isPackaged ? path.dirname(process.execPath) : __dirname;
+    const run = app.isPackaged ? `"""${q(process.execPath)}"""` : `"""${q(process.execPath)}"" ."`;
+    fs.writeFileSync(startupFile(), `Set sh = CreateObject("WScript.Shell")\r\nsh.CurrentDirectory = "${q(dir)}"\r\nsh.Run ${run}, 0, False\r\n`);
   } catch {}
 }
 

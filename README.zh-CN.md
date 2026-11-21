@@ -57,7 +57,11 @@ Agent Dock 停在屏幕边缘，给每个 Agent 显示三种状态之一：
 - **默认只读。** 不修改任何 Agent 的配置，也不向外发送任何数据；只有你自己打开的可选 Claude 插件，才会给 Claude 加一个插件。
 - **桌面快捷方式**，带全局启动键（`Ctrl+Alt+H`）。
 
-## 快速开始
+## 下载
+
+从[最新 release](https://github.com/kjw0716/agent-dock/releases/latest)下载 `Agent-Dock-Setup-<版本>.exe` 并运行。它按当前用户安装（不需要管理员权限），并添加开始菜单快捷方式。安装包没有代码签名，Windows SmartScreen 可能提示“Windows 已保护你的电脑”：点 **更多信息** > **仍要运行**。
+
+## 从源码运行
 
 需要 Windows 10 或 11、[Node.js](https://nodejs.org/) 20 及以上、Git。（截图脚本 `scripts/shoot.js` 需要 Node 22 及以上。）
 
