@@ -9,7 +9,7 @@
     "postinstall": "node scripts/electron-sqlite.js",
     "start": "electron .",
     "demo": "electron . --demo",
-    "test": "node --test test/sources.test.js test/agents.test.js test/asks.test.js test/channel.test.js test/plugin-install.test.js test/unread.test.js test/focus.test.js test/opencode.test.js test/jump.test.js",
+    "test": "node --test test/sources.test.js test/agents.test.js test/asks.test.js test/channel.test.js test/plugin-install.test.js test/unread.test.js test/focus.test.js test/opencode.test.js test/jump.test.js test/history.test.js test/usage.test.js test/prices.test.js test/stats.test.js test/phone.test.js test/bark.test.js test/tailscale.test.js test/tasks.test.js test/phone-host.test.js test/chats.test.js",
     "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1",
     "dist": "electron-builder --win nsis --x64 --publish never"
   },
@@ -64,8 +64,21 @@
       "opencode.js",
       "plugin-install.js",
       "sources.js",
+      "history.js",
+      "prices.js",
+      "stats.js",
+      "tailscale.js",
+      "tasks.js",
+      "chats.js",
+      "bark.js",
+      "phone-host.js",
+      "phone.js",
+      "stats-view.js",
+      "usage.js",
+      "usage-worker.js",
       "unread.js",
       "assets/**",
+      "phone/**",
       "claude-plugin/**",
       "package.json",
       "LICENSE",
@@ -90,5 +103,8 @@
       "deleteAppDataOnUninstall": false,
       "shortcutName": "Agent Dock"
     }
+  },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
   }
 }

@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen, shell, dialog } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -11,6 +11,9 @@ const { FocusReader } = require('./focus');
 const { codexUrl, exesOf, focusWindow } = require('./jump');
 const pluginInstall = require('./plugin-install');
 const { installedIds } = require('./agents');
+const { History } = require('./history');
+const { StatsService } = require('./stats');
+const { PhoneHost } = require('./phone-host');
 
 const DEMO = process.argv.includes('--demo');
 const DATA_DIR = process.env.AGENT_DOCK_DATA || process.env.AGENT_HUD_DATA || path.join(os.homedir(), '.agent-dock');
@@ -23,6 +26,8 @@ if (DATA_DIR === path.join(os.homedir(), '.agent-dock') && !fs.existsSync(DATA_D
 }
 const CONFIG = path.join(DATA_DIR, 'config.json');
 const channel = new Channel(path.join(DATA_DIR, 'channel'));
+const history = new History(path.join(DATA_DIR, 'history')); // every state change, for the statistics timeline
+const stats = new StatsService({ dataDir: DATA_DIR, history }); // its worker starts when the statistics window is first opened
 const UNREAD_FILE = path.join(DATA_DIR, 'unread.json');
 const unread = new UnreadTracker((() => {
   try {
@@ -174,7 +179,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // The user controls the width; the height always follows the content (never cut off,
 // never a blank area), limited to the screen's work area.
 function applySize() {
-  if (!win || win.isDestroyed()) return;
+  if (!win || win.isDestroyed() || statsMode) return;
   const cur = win.getBounds();
   const wa = screen.getDisplayMatching(cur).workArea;
   let w;
@@ -212,7 +217,7 @@ function createWindow() {
   win.on('move', () => {
     clearTimeout(t);
     t = setTimeout(() => {
-      if (fitted) return;
+      if (fitted || statsMode) return;
       const [x, y] = win.getPosition();
       patchConfig({ x, y });
     }, 400);
@@ -237,16 +242,68 @@ function setFitted(on, goBack = true) {
 }
 
 const resetLayout = () => {
+  if (statsMode) {
+    // the statistics view owns the window: close it first (it puts the old bounds back), then reset those
+    setStatsMode(false);
+    if (win && !win.isDestroyed()) win.webContents.send('close-stats');
+  }
   setFitted(false, false);
   patchConfig({ x: undefined, y: undefined, w: undefined, h: undefined, custom: undefined });
   place();
   applySize();
 };
 
-const MENU = { en: { reset: 'Reset position & size', quit: 'Quit' }, zh: { reset: '重置位置与大小', quit: '退出' } };
+// ------------------------------------------------------------- statistics
+// The statistics view takes over the dock window: it is enlarged for the view and put back exactly as it was
+// afterwards. The usage worker only runs while the view is open.
+const STATS_W = 1180;
+const STATS_H = 860;
+let statsMode = false;
+let statsPrev = null; // bounds before the view opened
+let statsTimer = null;
+let statsOff = null;
+function setStatsMode(on) {
+  if (!win || win.isDestroyed() || on === statsMode) return;
+  if (on) {
+    statsPrev = win.getBounds();
+    statsMode = true;
+    const wa = screen.getDisplayMatching(statsPrev).workArea;
+    const w = Math.min(STATS_W, wa.width - 16);
+    const h = Math.min(STATS_H, wa.height - 16);
+    const x = clamp(statsPrev.x, wa.x + 8, Math.max(wa.x + 8, wa.x + wa.width - w - 8));
+    const y = clamp(statsPrev.y, wa.y + 8, Math.max(wa.y + 8, wa.y + wa.height - h - 8));
+    win.setBounds({ x, y, width: w, height: h });
+    const changed = () => win && !win.isDestroyed() && win.webContents.send('stats:changed');
+    statsOff = stats.onScanned(changed);
+    stats.rescan();
+    statsTimer = setInterval(() => {
+      stats.rescan(); // new lines since the last pass; the view reloads when it finishes
+      changed(); // also redraws the timeline, which needs no scan
+    }, 30000);
+  } else {
+    statsMode = false;
+    if (statsOff) statsOff();
+    statsOff = null;
+    clearInterval(statsTimer);
+    statsTimer = null;
+    stats.stop(); // frees the index; a scan in progress is dropped and starts over the next time
+    if (statsPrev) win.setBounds(statsPrev); // exactly where and how big it was
+    statsPrev = null;
+    applySize();
+  }
+}
+function openStats() {
+  if (!win || win.isDestroyed()) return;
+  win.show();
+  win.webContents.send('open-stats');
+}
+
+const MENU = { en: { stats: 'Statistics', reset: 'Reset position & size', quit: 'Quit' }, zh: { stats: '统计', reset: '重置位置与大小', quit: '退出' } };
 const lang = () => (readConfig().lang === 'zh' ? 'zh' : 'en'); // English is the default
 const menu = () =>
   Menu.buildFromTemplate([
+    { label: MENU[lang()].stats, click: openStats },
+    { type: 'separator' },
     { label: MENU[lang()].reset, click: resetLayout },
     { type: 'separator' },
     { label: MENU[lang()].quit, click: () => app.quit() },
@@ -393,8 +450,12 @@ function tick() {
   }
   decorateCards(rows);
   allRows = rows;
+  // Only real sessions are logged: the placeholder row of an open app (labelKey) is not a session.
+  if (!DEMO && scanned) history.observe(rows.flatMap((r) => r.sessions.filter((s) => !s.labelKey)));
   const cfg = readConfig();
   rows = rows.filter((r) => agentOn(cfg, r.id));
+  visibleRows = rows;
+  if (!DEMO || PHONE_DEV) phoneHost.observe(rows, cfg.lang === 'zh' ? 'zh' : 'en');
   for (const r of rows) r.jump = r.id === 'claude' || r.id === 'codex' || exesOf(r.id).length > 0; // the dock knows how to open its chat or window
   const countAll = (pred) => rows.reduce((n, r) => n + r.sessions.filter(pred).length, 0);
   const waitingTotal = countAll((s) => s.state === 'waiting');
@@ -476,12 +537,88 @@ function pollProcesses() {
 let quitting = false;
 app.on('before-quit', () => {
   quitting = true;
+  stats.stop();
+  phoneHost.stop();
   if (procWatcher) {
     try {
       procWatcher.kill();
       execFile('taskkill', ['/pid', String(procWatcher.pid), '/t', '/f'], { windowsHide: true }, () => {});
     } catch {}
   }
+});
+
+// ------------------------------------------------ card actions (the dock's own clicks and the phone's)
+const markRead = (agent, id) => {
+  if (DEMO) {
+    demoRead.add(agent + ':' + id);
+    return;
+  }
+  if (isSending(id)) return; // keep the card until the message has been taken
+  if (unread.readSession(agent, id)) saveUnread();
+};
+// "No reply": this session's finished turn is read.
+function dismissCard(req) {
+  const { agent, id, askId } = req || {};
+  if (typeof agent !== 'string' || typeof id !== 'string' || !AGENTS.some((a) => a.id === agent)) return { ok: false, error: 'bad request' };
+  if (typeof askId === 'string' && agent === 'claude') {
+    dismissed.delete(id); // re-insert so the newest stay when trimmed
+    dismissed.set(id, { askId, at: Date.now() });
+    saveDismissed();
+  }
+  markRead(agent, id);
+  lastJson = '';
+  tick();
+  return { ok: true };
+}
+function answerCard(req) {
+  const { sessionId, askId, option, custom } = req || {};
+  const s = findSession(sessionId);
+  const isReply = req && req.kind === 'reply';
+  const card = s && (isReply ? s.reply : s.ask);
+  if (!card || card.id !== askId) return { ok: false, error: 'closed' };
+  if (!card.canAnswer) return { ok: false, error: card.note };
+  if (isReply && typeof custom !== 'string') return { ok: false, error: 'text-only' }; // a finished turn has no buttons to send
+  const prev = sent.get(sessionId);
+  if (prev && prev.askId === askId) {
+    const st = channel.state(sessionId, prev.promptId);
+    if (st && ['waiting', 'taken', 'started'].includes(st.state)) return { ok: false, error: 'already-sent' }; // one answer per question
+  }
+  let text;
+  if (typeof custom === 'string') text = custom;
+  else {
+    const o = card.options && card.options[Number(option)];
+    if (!o || (o.appAction && !o.message)) return { ok: false, error: 'app-only' }; // runs inside the Claude app
+    text = o.message || o.label;
+  }
+  const r = DEMO ? { ok: true, id: 'demo' } : channel.leave({ sessionId, askId, text });
+  if (r.ok) {
+    sent.set(sessionId, { askId, promptId: r.id });
+    lastJson = '';
+    tick();
+  }
+  return r;
+}
+
+// ------------------------------------------------------------------ phone
+const PHONE_DEV = process.env.AGENT_DOCK_PHONE_DEV === '1'; // local testing without Tailscale (and with the demo rows)
+let visibleRows = []; // what the dock shows, for the phone
+const phoneHost = new PhoneHost({
+  dataDir: DATA_DIR,
+  readConfig: () => readConfig(),
+  patchConfig: (p) => patchConfig(p),
+  rows: () => visibleRows,
+  answer: (b) => answerCard(b),
+  dismiss: (b) => dismissCard(b),
+  assetsDir: path.join(__dirname, 'phone'),
+  iconFile: path.join(__dirname, 'assets', 'icon-256.png'),
+  qr: (text) => {
+    const q = require('qrcode-generator')(0, 'M');
+    q.addData(text);
+    q.make();
+    return q.createSvgTag({ cellSize: 5, margin: 0, scalable: true });
+  },
+  dev: PHONE_DEV,
+  lang: () => lang(),
 });
 
 // ------------------------------------------------------------------ app
@@ -503,31 +640,38 @@ app.whenReady().then(() => {
     tick();
   });
   ipcMain.on('expand', (_e, on) => {
+    if (statsMode) return; // the window is the statistics view's for now
     setFitted(!!on);
   });
+  ipcMain.handle('stats:get', (_e, range) => stats.get(typeof range === 'string' ? range : '30d'));
+  ipcMain.on('view', (_e, v) => setStatsMode(v === 'stats'));
+  ipcMain.handle('stats:names', () => Object.fromEntries(AGENTS.map((a) => [a.id, a.name])));
   ipcMain.handle('settings:get', () => settingsView());
-  ipcMain.handle('settings:set', (_e, p) => setSettings(p || {}));
-  const markRead = (agent, id) => {
-    if (DEMO) {
-      demoRead.add(agent + ':' + id);
-      return;
-    }
-    if (isSending(id)) return; // keep the card until the message has been taken
-    if (unread.readSession(agent, id)) saveUnread();
-  };
-  ipcMain.on('dismiss', (_e, req) => {
-    // "No reply": this session's finished turn is read.
-    const { agent, id, askId } = req || {};
-    if (typeof agent !== 'string' || typeof id !== 'string' || !AGENTS.some((a) => a.id === agent)) return;
-    if (typeof askId === 'string' && agent === 'claude') {
-      dismissed.delete(id); // re-insert so the newest stay when trimmed
-      dismissed.set(id, { askId, at: Date.now() });
-      saveDismissed();
-    }
-    markRead(agent, id);
-    lastJson = '';
-    tick();
+  ipcMain.handle('phone:get', () => phoneHost.info());
+  ipcMain.handle('phone:set', (_e, p) => phoneHost.set(p || {}));
+  ipcMain.handle('phone:pair', () => phoneHost.pair());
+  ipcMain.handle('phone:revoke', async (_e, id) => {
+    phoneHost.revoke(id);
+    return phoneHost.info();
   });
+  ipcMain.handle('phone:setup', async () => {
+    const r = await phoneHost.setupTailscale();
+    return { ...r, info: await phoneHost.info() };
+  });
+  ipcMain.handle('phone:test', () => phoneHost.testPush());
+  ipcMain.handle('phone:download', () => shell.openExternal('https://tailscale.com/download'));
+  ipcMain.handle('phone:addDir', async () => {
+    // the folders phone tasks may run in are picked here, on this computer, and nowhere else
+    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
+    if (!r.canceled && r.filePaths[0]) phoneHost.addDir(r.filePaths[0]);
+    return phoneHost.info();
+  });
+  ipcMain.handle('phone:removeDir', async (_e, dir) => {
+    phoneHost.removeDir(String(dir));
+    return phoneHost.info();
+  });
+  ipcMain.handle('settings:set', (_e, p) => setSettings(p || {}));
+  ipcMain.on('dismiss', (_e, req) => dismissCard(req));
   ipcMain.handle('open', async (_e, req) => {
     const { agent, id } = req || {};
     if (typeof agent !== 'string' || typeof id !== 'string' || !AGENTS.some((a) => a.id === agent)) return false;
@@ -550,34 +694,7 @@ app.whenReady().then(() => {
     lastJson = '';
     tick();
   });
-  ipcMain.handle('answer', (_e, req) => {
-    const { sessionId, askId, option, custom } = req || {};
-    const s = findSession(sessionId);
-    const isReply = req && req.kind === 'reply';
-    const card = s && (isReply ? s.reply : s.ask);
-    if (!card || card.id !== askId) return { ok: false, error: 'closed' };
-    if (!card.canAnswer) return { ok: false, error: card.note };
-    if (isReply && typeof custom !== 'string') return { ok: false, error: 'text-only' }; // a finished turn has no buttons to send
-    const prev = sent.get(sessionId);
-    if (prev && prev.askId === askId) {
-      const st = channel.state(sessionId, prev.promptId);
-      if (st && ['waiting', 'taken', 'started'].includes(st.state)) return { ok: false, error: 'already-sent' }; // one answer per question
-    }
-    let text;
-    if (typeof custom === 'string') text = custom;
-    else {
-      const o = card.options && card.options[Number(option)];
-      if (!o || (o.appAction && !o.message)) return { ok: false, error: 'app-only' }; // runs inside the Claude app
-      text = o.message || o.label;
-    }
-    const r = DEMO ? { ok: true, id: 'demo' } : channel.leave({ sessionId, askId, text });
-    if (r.ok) {
-      sent.set(sessionId, { askId, promptId: r.id });
-      lastJson = '';
-      tick();
-    }
-    return r;
-  });
+  ipcMain.handle('answer', (_e, req) => answerCard(req));
   // Install or remove the Claude plugin (the user's click in Settings; it runs Claude's own CLI).
   ipcMain.handle('plugin:set', async (_e, on) => {
     if (pluginBusy) return { ok: false, error: 'busy' };
@@ -608,6 +725,7 @@ app.whenReady().then(() => {
   };
   ipcMain.on('resize', (_e, dir, on) => {
     if (!on) return finishDrag();
+    if (statsMode) return;
     if (dir !== 'e' && dir !== 'w') return;
     finishDrag();
     const start = screen.getCursorScreenPoint();
@@ -629,6 +747,7 @@ app.whenReady().then(() => {
     }, 16);
   });
 
+  if (!DEMO || PHONE_DEV) phoneHost.start().catch(() => {});
   if (pluginInstall.installed()) channel.prepare();
   channel.cleanup();
   setInterval(() => channel.cleanup(), 3600 * 1000);

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'self'">
 <style>
   :root {
     --bg: rgba(20, 22, 27, .94);
@@ -185,22 +185,121 @@
   .btns button { flex: 1; padding: 8px 0; border-radius: 10px; background: rgba(255, 255, 255, .07); font-size: 12px; }
   .btns button:hover { background: rgba(255, 255, 255, .12); }
   .btns .quit { color: #ff7b72; }
+
+  /* ---- statistics view (stats-view.js): one surface, one grid, no cards ---- */
+  #stats { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 6px 24px 24px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; -webkit-app-region: no-drag; cursor: default; }
+  #stats[hidden] { display: none; }
+  #scroll[hidden] { display: none; }
+  body.stats #panel { background: #15171c; } /* solid: no window behind may show through a page of numbers */
+  body.stats .h, body.stats .hint { display: none; }
+  #stats .st-page { display: grid; gap: 20px; }
+  #stats .st-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+  #stats .st-sum { display: flex; flex-wrap: wrap; gap: 8px 36px; }
+  #stats .sv { font-size: 26px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; }
+  #stats .sl { color: var(--muted); font-size: 12px; margin-top: 3px; white-space: nowrap; }
+  #stats .warn { color: var(--waiting); }
+  #stats .st-ctl { display: flex; align-items: center; gap: 12px; padding-bottom: 2px; }
+  #stats .st-status { color: var(--muted); font-size: 12px; }
+  #stats .sg { display: inline-flex; background: rgba(255, 255, 255, .06); border-radius: 9px; padding: 2px; }
+  #stats .sg button, #stats .tabs button { padding: 4px 11px; border-radius: 7px; color: var(--muted); font-size: 12px; }
+  #stats .sg button:hover, #stats .tabs button:hover { color: var(--text); }
+  #stats .sg button.on, #stats .tabs button.on { background: rgba(255, 255, 255, .14); color: var(--text); }
+  #stats .st-sec { border-top: 1px solid var(--line); padding-top: 10px; }
+  #stats .nodata, #stats .note { color: var(--muted); padding: 18px 0; font-size: 12.5px; }
+  #stats .nodata { text-align: center; }
+  #stats .note { padding: 10px 0; }
+
+  /* the shared grid: agent | tokens | cost | time */
+  #stats .lrow { display: grid; grid-template-columns: 150px 74px 74px minmax(0, 1fr); column-gap: 14px; align-items: center; min-height: 54px; }
+  #stats .lrow + .lrow { border-top: 1px solid rgba(255, 255, 255, .045); }
+  #stats .lrow.lhead { min-height: 22px; color: var(--muted); font-size: 11.5px; border-top: 0; }
+  #stats .lhead .hint { text-align: right; }
+  #stats .lrow.laxis { min-height: 18px; border-top: 0; }
+  #stats .num { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+  #stats .lhead .num { font-size: 11.5px; }
+  #stats .who { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; text-align: left; padding: 5px 7px; margin-left: -7px; border-radius: 8px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #stats button.who:hover { background: rgba(255, 255, 255, .06); }
+  #stats .lrow.on .who { background: rgba(255, 255, 255, .11); }
+  #stats .who.static { cursor: default; }
+  #stats .who i { flex: none; width: 9px; height: 9px; border-radius: 3px; }
+  #stats .cell { position: relative; min-width: 0; }
+  #stats .plot { display: block; width: 100%; height: 50px; overflow: visible; }
+  #stats .plot.day { height: 20px; }
+  #stats .selday { fill: rgba(255, 255, 255, .06); }
+  #stats .hit { cursor: pointer; }
+  #stats .hit:hover { fill: rgba(255, 255, 255, .08); }
+  #stats .allbar { fill: #c9ced8; }
+  #stats i.allbar { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 3px; background: #c9ced8; }
+  #stats .lrow.sumrow { border-top: 1px solid rgba(255, 255, 255, .16); }
+  #stats .stw { fill: var(--working); }
+  #stats .sta { fill: var(--waiting); }
+  #stats .lane { fill: rgba(255, 255, 255, .045); }
+  #stats .grid { stroke: rgba(255, 255, 255, .07); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  #stats .axis { height: 16px; }
+  #stats .axis span { position: absolute; top: 2px; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  #stats .axis.hours span:first-child { transform: none; }
+  #stats .axis.hours span:last-child { transform: translateX(-100%); }
+
+  #stats .lrow.dhead { grid-template-columns: 150px 1fr 1fr; min-height: 38px; border-top: 0; }
+  #stats .dhead .num { display: none; }
+  #stats .dtitle { font-size: 13px; font-weight: 600; }
+  #stats .dnav { display: flex; align-items: center; gap: 4px; font-size: 13px; }
+  #stats .dnav b { font-weight: 500; min-width: 120px; text-align: center; }
+  #stats .dnav button { width: 22px; height: 22px; border-radius: 6px; color: var(--muted); font-size: 16px; line-height: 1; }
+  #stats .dnav button:hover:not(:disabled) { background: rgba(255, 255, 255, .08); color: var(--text); }
+  #stats .dnav button:disabled { opacity: .3; cursor: default; }
+  #stats .dtot { color: var(--muted); font-size: 12px; text-align: right; }
+  #stats .dtot b { color: var(--text); font-weight: 500; margin-right: 10px; }
+  #stats .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+  #stats .dot.w { background: var(--working); }
+  #stats .dot.a { background: var(--waiting); }
+
+  #stats .thead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  #stats .tabs { display: inline-flex; gap: 2px; }
+  #stats .pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, .08); }
+  #stats .pill:hover { background: rgba(255, 255, 255, .14); }
+  #stats .dotc { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 7px; }
+  #stats .tablewrap { max-height: 420px; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; margin: 0 -6px; padding-right: 6px; }
+  #stats table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  #stats th { position: sticky; top: 0; background: #15171c; text-align: left; font-weight: 500; color: var(--muted); padding: 6px 8px; white-space: nowrap; }
+  #stats th.num, #stats td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  #stats th.sort { cursor: pointer; }
+  #stats th.sort:hover, #stats th.cur { color: var(--text); }
+  #stats td { padding: 6px 8px; border-top: 1px solid rgba(255, 255, 255, .045); white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  #stats tr:hover td { background: rgba(255, 255, 255, .04); }
+  #stats td.mut, #stats .mut { color: var(--muted); }
+  #stats .bar { display: inline-block; vertical-align: middle; width: 46px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .1); margin-left: 7px; overflow: hidden; }
+  #stats .bar i { display: block; height: 100%; background: var(--working); }
+  #stats .bar i.hi { background: var(--waiting); }
+  #stats .tt { position: fixed; z-index: 10; pointer-events: none; background: #262a33; border: 1px solid rgba(255, 255, 255, .12); border-radius: 9px; padding: 7px 10px; font-size: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); max-width: 320px; display: none; }
+  #stats .tt .t { font-weight: 600; margin-bottom: 3px; }
+  #stats .tt .r { display: flex; justify-content: space-between; gap: 18px; color: var(--muted); }
+  #stats .tt .r b { color: var(--text); font-weight: 500; }
 </style>
 </head>
 <body>
 <div id="panel">
-  <div class="top"><span class="title" id="title" hidden></span><i></i>
+  <div class="top"><button class="icon" id="statsbtn" style="left:4px;right:auto"></button><span class="title" id="title" hidden></span><i></i>
     <button class="icon" id="fit"></button>
     <button class="icon" id="toggle"></button></div>
   <div id="scroll"><div id="sizer"><div id="app"><div id="rows"></div></div></div></div>
+  <div id="stats" hidden></div>
 </div>
 <div class="h w" data-d="w"></div><div class="h e" data-d="e"></div>
 <svg class="hint" viewBox="0 0 4 18"><path d="M1 2v14M3.4 2v14" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>
+<script src="stats-view.js"></script>
 <script>
 const I18N = {
   en: {
     working: 'Working', waiting: 'Waiting', done: 'Done', empty: 'No agents running',
-    settings: 'Settings', back: 'Back', agents: 'Agents shown', general: 'General',
+    tasksOn: 'Chats from the phone (read, continue, start)', tasksFull: 'Full permissions (no prompts)', tasksFullWarn: 'A chat then runs without asking before any action: it can change or delete anything your account can. Anyone with a paired phone can start or continue one, and read every conversation.', tasksEdits: 'Without Full permissions: Claude can only read and edit files (no commands, no MCP tools), Codex is read-only, and conversations stay inside the folders below.', folders: 'Folders for new chats', addFolder: 'Add folder…', noFolders: 'No folder yet: add the folders the phone may work in.',
+    phone: 'Phone', phoneAccess: 'Phone access', phoneOffText: 'Off', phoneOnText: 'On · reachable only through Tailscale',
+    ts443: 'Something else already uses HTTPS 443 on this tailnet name. Remove it first (tailscale serve status), because the dock publishes on 443.', tsFunnel: 'Tailscale Funnel is on for this machine, which would make the dock public. Turn Funnel off first.',
+    tsNotInstalled: 'Tailscale is not installed on this computer.', tsDownload: 'Download Tailscale', tsLogin: 'Open Tailscale and sign in, then reopen Settings.', tsHttps: 'Turn on HTTPS certificates for your tailnet (Tailscale admin console, DNS page), then press Publish.', tsPublish: 'Publish to phone', tsServing: 'Reachable at', tsWorking: 'Working…',
+    pairPhone: 'Pair a phone', pairHint: 'Scan with the phone camera. Valid for 2 minutes, one use.', pairLocal: 'Tailscale is not publishing yet: this address works only on this computer.', pairCode: 'Pairing address',
+    devices: 'Paired phones', revoke: 'Revoke', revokeAll: 'Revoke all', lastSeen: 'last seen', never: 'never', phoneAnswer: 'Answer from the phone', phoneErr: 'Could not start the phone server',
+    barkTitle: 'Notifications (Bark)', barkPlaceholder: 'https://api.day.app/your-key', barkSave: 'Save', barkTest: 'Send test', barkSaved: 'Saved', barkSent: 'Test sent', barkFailed: 'Test failed', barkHint: 'Only the agent name and what happened are sent.',
+    settings: 'Settings', statistics: 'Statistics', back: 'Back', agents: 'Agents shown', general: 'General',
     onTop: 'Always on top', autostart: 'Launch at login', language: 'Language',
     reset: 'Reset position & size', quit: 'Quit', none: 'No sessions', missing: 'Not found',
     expandAll: 'Expand all', collapseAll: 'Collapse and restore size',
@@ -214,7 +313,14 @@ const I18N = {
   },
   zh: {
     working: '工作中', waiting: '等你', done: '已完成', empty: '没有运行中的 Agent',
-    settings: '设置', back: '返回', agents: '显示的 Agent', general: '通用',
+    tasksOn: '手机上的对话（查看、继续、新建）', tasksFull: '完全权限（不再询问）', tasksFullWarn: '开启后对话会在不询问的情况下执行任何操作：能改动或删除你的账号能碰的一切。任何配对过的手机都能新建或继续对话，并查看所有对话内容。', tasksEdits: '没有完全权限时：Claude 只能读写文件（不能执行命令，不能用 MCP 工具），Codex 只读，并且对话只能在下面的文件夹里进行。', folders: '新对话可用的文件夹', addFolder: '添加文件夹…', noFolders: '还没有文件夹：请添加手机可以工作的文件夹。',
+    phone: '手机', phoneAccess: '手机访问', phoneOffText: '已关闭', phoneOnText: '已开启 · 只能通过 Tailscale 访问',
+    ts443: '这个 tailnet 名称的 HTTPS 443 已被别的服务占用。Dock 要用 443 发布，请先移除它（tailscale serve status）。', tsFunnel: '这台机器开了 Tailscale Funnel，会让 Dock 暴露到公网。请先关掉 Funnel。',
+    tsNotInstalled: '这台电脑没有安装 Tailscale。', tsDownload: '下载 Tailscale', tsLogin: '请打开 Tailscale 并登录，然后重新打开设置。', tsHttps: '请先在 Tailscale 管理后台（DNS 页面）打开 HTTPS 证书，再点「发布到手机」。', tsPublish: '发布到手机', tsServing: '访问地址', tsWorking: '处理中…',
+    pairPhone: '配对手机', pairHint: '用手机相机扫描。2 分钟内有效，只能用一次。', pairLocal: 'Tailscale 还没有发布：这个地址只能在本机打开。', pairCode: '配对地址',
+    devices: '已配对的手机', revoke: '撤销', revokeAll: '全部撤销', lastSeen: '最近使用', never: '从未', phoneAnswer: '允许在手机上回答', phoneErr: '手机服务启动失败',
+    barkTitle: '通知（Bark）', barkPlaceholder: 'https://api.day.app/你的key', barkSave: '保存', barkTest: '发送测试', barkSaved: '已保存', barkSent: '测试已发送', barkFailed: '测试失败', barkHint: '只发送 Agent 名称和发生了什么。',
+    settings: '设置', statistics: '统计', back: '返回', agents: '显示的 Agent', general: '通用',
     onTop: '置顶显示', autostart: '开机自启', language: '语言',
     reset: '重置位置与大小', quit: '退出', none: '没有会话', missing: '未找到',
     expandAll: '展开全部', collapseAll: '收起并还原大小',
@@ -233,6 +339,7 @@ const t = (k, n) => {
   return typeof v === 'function' ? v(n) : v;
 };
 const ICON_SET = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 4h6M12 4h2M2 12h2M8 12h6M2 8h10"/><circle cx="10" cy="4" r="1.6"/><circle cx="6" cy="12" r="1.6"/></svg>';
+const ICON_STATS = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5h11M4.5 11V8M8 11V3.5M11.5 11V6"/></svg>';
 const ICON_BACK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>';
 const ICON_FIT = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>';
 const ICON_UNFIT = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v3H3M10 3v3h3M6 13v-3H3M10 13v-3h3"/></svg>';
@@ -430,6 +537,80 @@ function replyCard(r, s) {
     ${input}${askNote(a)}</div>`;
 }
 
+
+/* ---- phone: Settings section ---- */
+let phone = null;
+let phonePair = null;
+let phoneBusy = false;
+let phoneMsg = '';
+let barkDraft = null;
+const phoneAgo = (ms) => (ms ? new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : t('never'));
+function phoneSection(sw) {
+  if (!phone) return '';
+  let h = `<div class="sect">${t('phone')}</div>
+    <div class="opt plain" data-phone="toggle"><div><div class="t">${t('phoneAccess')}</div><div class="d">${phone.enabled ? t('phoneOnText') : t('phoneOffText')}</div>${phone.error ? `<div class="d" style="color:#ff9b8f">${esc(t('phoneErr'))}: ${esc(phone.error)}</div>` : ''}</div>${sw(phone.enabled)}</div>`;
+  if (!phone.enabled) return h;
+  const ts = phone.tailscale || {};
+  const btn = (act, label, extra = '') => `<div class="btns"><button data-phone="${act}" ${extra}>${esc(label)}</button></div>`;
+  if (!ts.installed) h += `<div class="opt plain"><div class="d">${t('tsNotInstalled')}</div></div>` + btn('download', t('tsDownload'));
+  else if (ts.state !== 'Running') h += `<div class="opt plain"><div class="d">${t('tsLogin')}</div></div>`;
+  else if (!ts.serving) h += `<div class="opt plain"><div class="d">${ts.https ? '' : t('tsHttps')}</div></div>` + btn('setup', phoneBusy ? t('tsWorking') : t('tsPublish'), phoneBusy ? 'disabled' : '');
+  else h += `<div class="opt plain"><div><div class="d">${t('tsServing')}</div><div class="t" style="font-size:12px;word-break:break-all;user-select:text">https://${esc(ts.host)}</div></div></div>`;
+  if (phoneMsg) h += `<div class="opt plain"><div class="d" style="color:#ff9b8f">${esc(phoneMsg)}</div></div>`;
+  h += btn('pair', t('pairPhone'), phone.running ? '' : 'disabled');
+  if (phonePair) {
+    h += `<div class="opt plain" style="display:block"><div style="background:#fff;border-radius:12px;padding:12px;width:190px;margin:4px auto 8px">${phonePair.qr}</div>
+      <div class="d" style="text-align:center">${t('pairHint')}</div>
+      ${phonePair.viaTailscale ? '' : `<div class="d" style="text-align:center;color:var(--waiting);margin-top:4px">${t('pairLocal')}</div>`}
+      <div class="d" style="margin-top:6px;word-break:break-all;user-select:text">${esc(phonePair.url)}</div></div>`;
+  }
+  const devs = phone.devices || [];
+  if (devs.length) {
+    h += `<div class="sect">${t('devices')}</div>` + devs.map((d) => `<div class="opt plain"><div><div class="t">${esc(d.label)}</div><div class="d">${t('lastSeen')} ${esc(phoneAgo(d.lastSeen))}</div></div><button class="seg" data-phone="revoke" data-id="${esc(d.id)}">${t('revoke')}</button></div>`).join('') + btn('revoke', t('revokeAll'), 'data-id="all" class="quit"');
+  }
+
+  h += `<div class="opt plain" data-phone="tasks"><div><div class="t">${t('tasksOn')}</div><div class="d">${phone.tasks ? (phone.tasksFull ? '' : t('tasksEdits')) : ''}</div></div>${sw(phone.tasks)}</div>`;
+  if (phone.tasks) {
+    h += `<div class="opt plain" data-phone="tasksfull"><div><div class="t">${t('tasksFull')}</div>${phone.tasksFull ? `<div class="d" style="color:var(--waiting)">${t('tasksFullWarn')}</div>` : ''}</div>${sw(phone.tasksFull)}</div>`;
+    h += `<div class="sect">${t('folders')}</div>`;
+    h += (phone.dirs || []).map((d) => `<div class="opt plain"><div class="d" style="word-break:break-all;user-select:text">${esc(d)}</div><button class="seg" data-phone="rmdir" data-id="${esc(d)}">${t('revoke')}</button></div>`).join('') || `<div class="opt plain"><div class="d">${t('noFolders')}</div></div>`;
+    h += btn('adddir', t('addFolder'));
+  }
+  h += `<div class="opt plain" data-phone="answer"><div class="t">${t('phoneAnswer')}</div>${sw(phone.answer)}</div>
+    <div class="sect">${t('barkTitle')}</div>
+    <div class="opt plain" style="display:block"><input id="barkInput" placeholder="${esc(t('barkPlaceholder'))}" value="${esc(barkDraft !== null ? barkDraft : '')}" maxlength="300" style="width:100%;font:inherit;font-size:12px;color:var(--text);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:8px;padding:6px 9px;outline:none;user-select:text">
+      <div class="d" style="margin-top:4px">${phone.bark ? esc(phone.bark) + ' · ' : ''}${t('barkHint')}</div></div>
+    <div class="btns"><button data-phone="barksave">${t('barkSave')}</button><button data-phone="barktest">${t('barkTest')}</button>${phone.bark ? `<button data-phone="barkclear">${t('revoke')}</button>` : ''}</div>`;
+  if (phone.lastPush) h += `<div class="opt plain"><div class="d" style="color:${phone.lastPush.ok ? 'var(--done)' : '#ff9b8f'}">${phone.lastPush.ok ? t('barkSent') : t('barkFailed') + (phone.lastPush.error ? ' · ' + esc(phone.lastPush.error) : '')}</div></div>`;
+  return h;
+}
+async function phoneAction(kind, id) {
+  phoneMsg = '';
+  if (kind === 'toggle') { phone = await window.hud.phoneSet({ enabled: !phone.enabled }); phonePair = null; }
+  else if (kind === 'answer') phone = await window.hud.phoneSet({ answer: !phone.answer });
+  else if (kind === 'tasks') phone = await window.hud.phoneSet({ tasks: !phone.tasks });
+  else if (kind === 'tasksfull') phone = await window.hud.phoneSet({ tasksFull: !phone.tasksFull });
+  else if (kind === 'adddir') phone = await window.hud.phoneAddDir();
+  else if (kind === 'rmdir') phone = await window.hud.phoneRemoveDir(id);
+  else if (kind === 'download') await window.hud.phoneDownload();
+  else if (kind === 'setup') {
+    phoneBusy = true; render();
+    const r = await window.hud.phoneSetup();
+    phoneBusy = false;
+    phone = r.info;
+    if (!r.ok) phoneMsg = r.error === 'https' ? t('tsHttps') : r.error === 'busy443' ? t('ts443') : r.error === 'funnel' ? t('tsFunnel') : (r.error || 'failed');
+  } else if (kind === 'pair') {
+    const r = await window.hud.phonePair();
+    phonePair = r.ok ? r : null;
+    if (!r.ok) phoneMsg = r.error || 'failed';
+    phone = await window.hud.phoneGet();
+  } else if (kind === 'revoke') { phone = await window.hud.phoneRevoke(id); if (id === 'all') phonePair = null; }
+  else if (kind === 'barksave') { if (barkDraft !== null) phone = await window.hud.phoneSet({ bark: barkDraft }); barkDraft = null; }
+  else if (kind === 'barkclear') { phone = await window.hud.phoneSet({ bark: '' }); barkDraft = null; }
+  else if (kind === 'barktest') { await window.hud.phoneTest(); phone = await window.hud.phoneGet(); }
+  render();
+}
+
 function renderSettings(el) {
   if (!settings) { el.innerHTML = ''; return; }
   const sw = (on) => `<div class="toggle${on ? ' on' : ''}"></div>`;
@@ -438,6 +619,7 @@ function renderSettings(el) {
   const seg = (code, name) => `<button class="seg${settings.lang === code ? ' on' : ''}" data-lang="${code}">${name}</button>`;
   el.innerHTML = `<div class="sect">${t('answerFromDock')}</div>
     <div class="opt plain" data-plugin="1"><div><div class="t">${t('pluginOn')}</div><div class="d">${settings.plugin.busy || pluginWorking ? t('installing') : settings.plugin.installed ? t('pluginInstalled', settings.plugin.loaded) : t('pluginOff')}</div>${pluginError ? `<div class="d" style="color:#ff9b8f">${esc(pluginError)}</div>` : ''}</div>${sw(settings.plugin.installed)}</div>
+    ${phoneSection(sw)}
     <div class="sect">${t('agents')}</div>${settings.agents.map(agent).join('')}
     <div class="opt plain" data-opt="onTop"><div class="t">${t('onTop')}</div>${sw(settings.onTop)}</div>
     <div class="opt plain" data-opt="autostart"><div class="t">${t('autostart')}</div>${sw(settings.autostart)}</div>
@@ -471,16 +653,27 @@ function layout() {
 function render() {
   const el = document.getElementById('rows');
   const inSettings = view === 'settings';
+  const inStats = view === 'stats';
   const title = document.getElementById('title');
-  title.hidden = !inSettings;
-  title.textContent = t('settings');
+  title.hidden = !(inSettings || inStats);
+  title.textContent = inStats ? t('statistics') : t('settings');
+  title.style.left = inStats ? '38px' : '';
   const btn = document.getElementById('toggle');
   btn.innerHTML = inSettings ? ICON_BACK : ICON_SET;
   btn.title = inSettings ? t('back') : t('settings');
+  btn.hidden = inStats;
+  const sb = document.getElementById('statsbtn');
+  sb.innerHTML = inStats ? ICON_BACK : ICON_STATS;
+  sb.title = inStats ? t('back') : t('statistics');
+  sb.hidden = inSettings;
   const fb = document.getElementById('fit');
   fb.innerHTML = open.size ? ICON_UNFIT : ICON_FIT;
   fb.title = open.size ? t('collapseAll') : t('expandAll');
-  fb.hidden = inSettings;
+  fb.hidden = inSettings || inStats;
+  document.body.classList.toggle('stats', inStats);
+  document.getElementById('scroll').hidden = inStats;
+  document.getElementById('stats').hidden = !inStats;
+  if (inStats) { document.getElementById('panel').className = 'm-wide'; return; } // the window is sized by the main process
   inSettings ? renderSettings(el) : renderStatus(el);
   layout();
   syncAnimations();
@@ -515,12 +708,38 @@ document.getElementById('fit').addEventListener('click', () => {
 
 document.getElementById('toggle').addEventListener('click', async () => {
   view = view === 'settings' ? 'status' : 'settings';
-  if (view === 'settings') settings = await window.hud.getSettings();
+  if (view === 'settings') { settings = await window.hud.getSettings(); phone = await window.hud.phoneGet(); phonePair = null; phoneMsg = ''; }
   render();
 });
 
+/* The statistics view takes over the whole window: the main process enlarges it and puts it back afterwards. */
+let statsMounted = false;
+async function setStats(on) {
+  if (on === (view === 'stats')) return;
+  view = on ? 'stats' : 'status';
+  window.hud.view(on ? 'stats' : 'dock');
+  if (!on) {
+    StatsView.hide();
+    syncExpanded(true); // an agent that left while this view was open may have closed the last row
+    render();
+    return;
+  }
+  render();
+  if (!statsMounted) {
+    statsMounted = true;
+    StatsView.mount(document.getElementById('stats'), { get: (r) => window.hud.statsGet(r) });
+  }
+  StatsView.show(lang, await window.hud.statsNames(), (id) => (SPEC[id] ? SPEC[id].c[0] : null));
+}
+document.getElementById('statsbtn').addEventListener('click', () => setStats(view !== 'stats'));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && view === 'stats') setStats(false); });
+window.hud.onOpenStats(() => setStats(true));
+window.hud.onCloseStats(() => setStats(false));
+window.hud.onStatsChanged(() => { if (view === 'stats') StatsView.refresh(); });
+
 document.getElementById('rows').addEventListener('input', (e) => {
   if (e.target.matches('.ask-custom input')) drafts.set(e.target.dataset.key, e.target.value);
+  if (e.target.id === 'barkInput') barkDraft = e.target.value;
 });
 document.getElementById('rows').addEventListener('focusin', (e) => { focused = e.target.matches('.ask-custom input') ? e.target.dataset.key : null; });
 document.getElementById('rows').addEventListener('keydown', (e) => {
@@ -545,6 +764,8 @@ document.getElementById('rows').addEventListener('click', async (e) => {
     return; // clicks inside a question never open or close the row
   }
   if (view === 'settings') {
+    const pp = e.target.closest('[data-phone]');
+    if (pp) { await phoneAction(pp.dataset.phone, pp.dataset.id); return; }
     if (e.target.closest('[data-plugin]')) {
       if (pluginWorking) return;
       pluginWorking = true;
@@ -573,6 +794,7 @@ document.getElementById('rows').addEventListener('click', async (e) => {
     } else return;
     lang = settings.lang;
     jumpOn = settings.jump;
+    StatsView.setLang(lang);
     render();
     return;
   }
