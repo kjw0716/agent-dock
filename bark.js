@@ -72,8 +72,8 @@ class Notifier {
     for (const r of rows) {
       for (const s of r.sessions) {
         if (s.labelKey) continue; // the placeholder of an open app is not a session
-        if (s.state === 'waiting') out.push({ key: `w:${r.id}:${s.id}:${s.ask ? s.ask.id : s.since}`, agent: r.id, name: r.name, kind: 'waiting' });
-        else if (s.state === 'done' && s.unread) out.push({ key: `d:${r.id}:${s.id}:${s.since}`, agent: r.id, name: r.name, kind: 'done' });
+        if (s.state === 'waiting') out.push({ key: `w:${r.id}:${s.id}:${s.ask ? s.ask.id : s.since}`, agent: r.id, name: r.name, kind: 'waiting', open: `${r.id}:${s.id}` });
+        else if (s.state === 'done' && s.unread) out.push({ key: `d:${r.id}:${s.id}:${s.since}`, agent: r.id, name: r.name, kind: 'done', open: `${r.id}:${s.id}` });
       }
     }
     return out;
@@ -92,7 +92,7 @@ class Notifier {
     if (this.seen.size > 2000) this.seen = new Set([...this.seen].slice(-1000));
     const groups = new Map();
     for (const e of fresh) {
-      const g = groups.get(e.agent + e.kind) || { name: e.name, kind: e.kind, n: 0 };
+      const g = groups.get(e.agent + e.kind) || { name: e.name, kind: e.kind, n: 0, open: e.open };
       g.n++;
       groups.set(e.agent + e.kind, g);
     }
@@ -103,7 +103,8 @@ class Notifier {
       this.sent = this.sent.filter((t) => now - t < SEND_WINDOW);
       if (this.sent.length >= SEND_MAX) break;
       this.sent.push(now);
-      const message = { title: String(g.name || 'Agent'), body: tx[g.kind] + (g.n > 1 ? tx.more(g.n) : '') };
+      // one event opens that conversation; a group of them opens the list
+      const message = { title: String(g.name || 'Agent'), body: tx[g.kind] + (g.n > 1 ? tx.more(g.n) : ''), ...(g.n === 1 && g.open ? { open: g.open } : {}) };
       pushed.push(message);
       Promise.resolve(this.push(message)).catch(() => {});
     }

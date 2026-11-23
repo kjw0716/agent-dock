@@ -60,6 +60,17 @@ function findClaude({ env = process.env, exists = (p) => fs.existsSync(p) } = {}
   return null;
 }
 
+/** OpenCode's command line client, bundled with its desktop app (not on PATH), or on PATH. */
+function findOpenCode({ env = process.env, exists = (p) => fs.existsSync(p) } = {}) {
+  const f = path.join(env.LOCALAPPDATA || '', 'Programs', 'ai.opencode.desktop', 'resources', 'opencode-cli.exe');
+  if (process.platform === 'win32' && exists(f)) return f;
+  for (const d of String(env.PATH || env.Path || '').split(path.delimiter).filter(Boolean)) {
+    const g = path.join(d, process.platform === 'win32' ? 'opencode.exe' : 'opencode');
+    if (exists(g)) return g;
+  }
+  return null;
+}
+
 /** Codex: its node script from the global npm folder (the .cmd/.ps1 shims need a shell). */
 function findCodex({ env = process.env, exists = (p) => fs.existsSync(p) } = {}) {
   const roots = [path.join(env.APPDATA || '', 'npm', 'node_modules'), path.join(env.ProgramFiles || '', 'nodejs', 'node_modules')];
@@ -80,13 +91,14 @@ class TaskRunner {
   /**
    * opts: { mode() -> 'edits' | 'full', dirs() -> [absolute paths], spawn?, claude?, codex?, now?, kill? }
    */
-  constructor({ mode, dirs, spawn = nodeSpawn, claude = () => findClaude(), codex = () => findCodex(), now = () => Date.now(), kill = killTree, onEnd = () => {} }) {
+  constructor({ mode, dirs, spawn = nodeSpawn, claude = () => findClaude(), codex = () => findCodex(), opencode = () => findOpenCode(), now = () => Date.now(), kill = killTree, onEnd = () => {} }) {
     this.onEnd = onEnd;
     this.mode = mode;
     this.dirs = dirs;
     this.spawn = spawn;
     this.claude = claude;
     this.codex = codex;
+    this.opencode = opencode;
     this.now = now;
     this.kill = kill;
     this.tasks = [];
@@ -141,10 +153,10 @@ class TaskRunner {
   }
 
   launch({ agent, prompt, model, effort, cwd, name, session, fork }) {
-    if (agent !== 'claude' && agent !== 'codex') return { ok: false, error: 'agent' };
+    if (agent !== 'claude' && agent !== 'codex' && agent !== 'opencode') return { ok: false, error: 'agent' };
     if (typeof prompt !== 'string' || !prompt.trim()) return { ok: false, error: 'prompt' };
     if (prompt.length > MAX_PROMPT || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(prompt)) return { ok: false, error: 'prompt' };
-    const word = /^[A-Za-z0-9._-]{1,60}$/;
+    const word = agent === 'opencode' ? /^[A-Za-z0-9._-]{1,60}\/[A-Za-z0-9._:-]{1,80}$/ : /^[A-Za-z0-9._-]{1,60}$/; // OpenCode models are provider/model
     if ((model && !word.test(model)) || (effort && !/^[a-z]{2,12}$/.test(effort))) return { ok: false, error: 'model' };
     if (this.running() >= MAX_RUNNING) return { ok: false, error: 'busy' };
     const mode = this.mode() === 'full' ? 'full' : 'edits';
@@ -158,6 +170,20 @@ class TaskRunner {
       if (!cmd) return { ok: false, error: 'not installed' };
       if (!session || fork) id = randomUUID(); // a copy gets its own id up front, so the phone can follow it
       args = ['-p', '--output-format', 'stream-json', '--verbose', ...(session ? ['--resume', session, ...(fork ? ['--fork-session', '--session-id', id] : [])] : ['--session-id', id]), ...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : []), ...(mode === 'full' ? ['--dangerously-skip-permissions'] : ['--permission-mode', 'acceptEdits', '--tools', 'Read,Edit,Write,Glob,Grep', '--strict-mcp-config', '--restricted'])];
+    } else if (agent === 'opencode') {
+      cmd = this.opencode();
+      if (!cmd) return { ok: false, error: 'not installed' };
+      // `--standalone`: the run writes the database itself instead of going through the desktop app's background service.
+      // A new chat or a copy gets its id from the first event; `--agent plan` is OpenCode's read-only agent.
+      args = ['run', '--standalone', '--format', 'json', ...(model ? ['-m', model + (effort ? '#' + effort : '')] : []), ...(session ? ['-s', session, ...(fork ? ['--fork'] : [])] : []), ...(mode === 'full' ? ['--auto'] : ['--agent', 'plan'])];
+      id = session && !fork ? session : '';
+      env.PWD = cwd; // OpenCode takes the chat's folder from PWD, not from the process's real working directory
+      if (mode !== 'full') {
+        // A folder's own opencode.json / .opencode/plugin would otherwise widen the read-only agent (a plugin is code that runs
+        // on load: verified). Without these the run ignores everything the folder says.
+        env.OPENCODE_DISABLE_PROJECT_CONFIG = '1';
+        env.OPENCODE_CONFIG_PROJECT_DISABLE = '1';
+      }
     } else {
       const script = this.codex();
       if (!script) return { ok: false, error: 'not installed' };
@@ -246,6 +272,13 @@ class TaskRunner {
         const t = o.message.content.filter((c) => c && c.type === 'text').map((c) => c.text).join('\n');
         if (t) task.text = text(t);
       }
+    } else if (agent === 'opencode') {
+      if (typeof o.sessionID === 'string' && /^[A-Za-z0-9_-]{7,81}$/.test(o.sessionID) && !task.session && o.sessionID !== task.from) task.session = o.sessionID;
+      if (o.type === 'text' && o.part && typeof o.part.text === 'string') task.text = text(o.part.text);
+      else if (o.type === 'error') {
+        task.failed = true;
+        task.error = text(o.error && (o.error.message || o.error.data && o.error.data.message)) || task.error || 'error';
+      }
     } else if (o.type === 'thread.started' && typeof o.thread_id === 'string' && /^[A-Za-z0-9_-]{7,81}$/.test(o.thread_id)) {
       if (!task.session) task.session = o.thread_id;
     } else if (o.item && o.item.type === 'agent_message' && text(o.item.text)) task.text = text(o.item.text);
@@ -281,4 +314,4 @@ function killTree(child) {
   }
 }
 
-module.exports = { localDir, inside, TaskRunner, findClaude, findCodex, killTree, MAX_PROMPT, MAX_RUNNING };
+module.exports = { localDir, inside, TaskRunner, findClaude, findCodex, findOpenCode, killTree, MAX_PROMPT, MAX_RUNNING };

@@ -9,7 +9,7 @@
     "postinstall": "node scripts/electron-sqlite.js",
     "start": "electron .",
     "demo": "electron . --demo",
-    "test": "node --test test/sources.test.js test/agents.test.js test/asks.test.js test/channel.test.js test/plugin-install.test.js test/unread.test.js test/focus.test.js test/opencode.test.js test/jump.test.js test/history.test.js test/usage.test.js test/prices.test.js test/stats.test.js test/phone.test.js test/bark.test.js test/tailscale.test.js test/tasks.test.js test/phone-host.test.js test/chats.test.js",
+    "test": "node --test test/sources.test.js test/agents.test.js test/asks.test.js test/channel.test.js test/plugin-install.test.js test/unread.test.js test/focus.test.js test/opencode.test.js test/jump.test.js test/history.test.js test/usage.test.js test/prices.test.js test/stats.test.js test/phone.test.js test/bark.test.js test/tailscale.test.js test/tasks.test.js test/phone-host.test.js test/chats.test.js test/push.test.js",
     "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1",
     "dist": "electron-builder --win nsis --x64 --publish never"
   },
@@ -73,7 +73,9 @@
       "bark.js",
       "phone-host.js",
       "phone.js",
+      "push.js",
       "stats-view.js",
+      "mascots.js",
       "usage.js",
       "usage-worker.js",
       "unread.js",
@@ -105,6 +107,7 @@
     }
   },
   "dependencies": {
-    "qrcode-generator": "^2.0.4"
+    "qrcode-generator": "^2.0.4",
+    "web-push": "^3.6.7"
   }
 }

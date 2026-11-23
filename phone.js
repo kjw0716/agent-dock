@@ -69,7 +69,30 @@ class PhoneServer {
   }
 
   listDevices() {
-    return this.devices.map((d) => ({ id: d.id, label: d.label, created: d.created, lastSeen: d.lastSeen, login: d.login || '' }));
+    return this.devices.map((d) => ({ id: d.id, label: d.label, created: d.created, lastSeen: d.lastSeen, login: d.login || '', push: !!d.push }));
+  }
+
+  /** A phone's web-push subscription ({ endpoint, p256dh, auth }, already checked) or null to remove it. Lives on the device record. */
+  setPush(id, sub) {
+    const d = this.devices.find((x) => x.id === id);
+    if (!d) return false;
+    if (sub) d.push = sub;
+    else delete d.push;
+    this.save();
+    return true;
+  }
+
+  pushTargets() {
+    return this.devices.filter((d) => d.push).map((d) => ({ id: d.id, ...d.push }));
+  }
+
+  dropPush(ids) {
+    let n = 0;
+    for (const d of this.devices) if (ids.includes(d.id) && d.push) {
+      delete d.push;
+      n++;
+    }
+    if (n) this.save();
   }
 
   revoke(id) {
@@ -206,7 +229,7 @@ class PhoneServer {
         } catch {
           return send(404, { error: 'not found' });
         }
-        const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+        const csp = "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
         res.writeHead(200, { ...base, 'Content-Type': a.type, 'Content-Length': body.length, ...(a.type.startsWith('text/html') ? { 'Content-Security-Policy': csp } : {}) });
         return res.end(body);
       }
@@ -239,6 +262,7 @@ class PhoneServer {
       if (!device) return send(401, { error: 'auth' });
 
       if (req.method === 'GET' && route === '/api/state') return send(200, { ...this.handlers.state(), features: this.handlers.features(), secure, now: this.now() });
+      if (req.method === 'GET' && route === '/api/push') return send(200, this.handlers.pushState ? this.handlers.pushState(device) : { key: '' });
       if (req.method === 'GET' && (route === '/api/chats' || route === '/api/chat')) {
         // full conversation text is the most sensitive thing served: only over Tailscale's HTTPS
         if (!secure) return send(403, { error: 'insecure' });
@@ -251,7 +275,7 @@ class PhoneServer {
         }
         return send(200, r === undefined ? { ok: false } : r);
       }
-      if (req.method === 'POST' && ['/api/answer', '/api/dismiss', '/api/task'].includes(route)) {
+      if (req.method === 'POST' && ['/api/answer', '/api/dismiss', '/api/task', '/api/push'].includes(route)) {
         // an action changes something on this computer: only over Tailscale's HTTPS
         if (!secure) return send(403, { error: 'insecure' });
         const body = await this.readBody(req);

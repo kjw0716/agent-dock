@@ -92,6 +92,8 @@
   // The mascot colour of the agent, unless it is too dark to read on this background (OpenCode, Grok, Cursor...): then
   // a light colour from a fixed list, handed out in the order of the sorted ids of all dark agents, so each one keeps
   // its own colour and no two of the first six share one.
+  // The agent's own mascot (drawn by the page), small; a colour square when the page has none for it.
+  const logo = (id, col) => (typeof logoSvg === 'function' ? `<span class="logo">${logoSvg(id, 22)}</span>` : `<i style="background:${col}"></i>`);
   const lum = (c) => {
     const m = c && /^#([0-9a-f]{6})$/i.exec(c);
     if (!m) return 0;
@@ -209,7 +211,7 @@
       svg += '</svg>';
       const cost = tot ? (tot.unp && !tot.cost ? `<span class="mut">${t('noPrice')}</span>` : fmtCost(tot.cost) + (tot.unp ? '*' : '')) : '';
       html += `<div class="lrow${state.agent === id ? ' on' : ''}" data-agent="${esc(id)}">
-        <button class="who" data-filter="${esc(id)}" title="${esc(t('clear'))}"><i style="background:${col}"></i>${esc(name(id))}</button>
+        <button class="who" data-filter="${esc(id)}" title="${esc(t('clear'))}">${logo(id, col)}${esc(name(id))}</button>
         <div class="num">${tot ? fmtTok(tokOf(tot)) : '–'}</div><div class="num">${cost}</div><div class="cell">${svg}</div></div>`;
     }
     // the sum of everything: the same columns, its own scale
@@ -244,8 +246,10 @@
       });
       svg += '</svg>';
       const tt = u.totals;
-      html += `<div class="lrow sumrow"><div class="who static"><i class="allbar"></i>${esc(t('allAgents'))}</div>
+      const sumRow = `<div class="lrow sumrow"><div class="who static"><i class="allbar"></i>${esc(t('allAgents'))}</div>
         <div class="num">${fmtTok(tt.tokens)}</div><div class="num">${fmtCost(tt.cost)}${tt.unpriced.length ? '*' : ''}</div><div class="cell">${svg}</div></div>`;
+      const cut = html.indexOf('</div></div>') + '</div></div>'.length; // the header row ends here
+      html = html.slice(0, cut) + sumRow + html.slice(cut);
     }
     // date axis, in the same column as the plots
     const every = Math.max(1, Math.ceil(days.length / 10));
@@ -301,7 +305,7 @@
       svg += '</svg>';
       const tok = dayData && dayData.agents[id];
       const c = dayData && dayData.agentCost && dayData.agentCost[id];
-      html += `<div class="lrow"><div class="who static"><i style="background:${col}"></i>${esc(name(id))}</div><div class="num">${tok ? fmtTok(tok) : ''}</div><div class="num">${c ? fmtCost(c) : ''}</div><div class="cell">${svg}</div></div>`;
+      html += `<div class="lrow"><div class="who static">${logo(id, col)}${esc(name(id))}</div><div class="num">${tok ? fmtTok(tok) : ''}</div><div class="num">${c ? fmtCost(c) : ''}</div><div class="cell">${svg}</div></div>`;
     }
     const ticks = [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => `<span style="left:${(h / 24) * 100}%">${String(h).padStart(2, '0')}:00</span>`).join('');
     html += `<div class="lrow laxis"><div></div><div></div><div></div><div class="cell axis hours">${ticks}</div></div>`;
@@ -317,7 +321,7 @@
     return t('agoD', Math.floor(m / 1440));
   }
   const costCell = (cost, unp) => (unp && !cost ? `<span class="mut">${t('noPrice')}</span>` : fmtCost(cost) + (unp ? `<span class="mut" title="${esc(t('partial'))}">*</span>` : ''));
-  const who = (id) => `<span class="dotc" style="background:${colorOf(id)}"></span>${esc(name(id))}`;
+  const who = (id) => `<span class="whow">${logo(id, colorOf(id))}${esc(name(id))}</span>`;
 
   function renderTables(d) {
     const u = d.usage;

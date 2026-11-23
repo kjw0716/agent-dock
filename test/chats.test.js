@@ -315,3 +315,195 @@ test('without full permissions a conversation outside the allowed folders is ref
   config.phone.dirs = [tmp('dock-other-')];
   assert.strictEqual(ph.task({ op: 'send', key: `claude:${ID}`, agent: 'claude', prompt: 'x' }).error, 'outside');
 });
+
+test('paging: list(limit) says whether more exist; the agent list for new chats comes with the options', () => {
+  const { h } = home();
+  const ix = new ChatIndex({ home: h });
+  assert.strictEqual(ix.list(1).length, 1);
+  assert.strictEqual(ix.more, true);
+  assert.strictEqual(ix.list(10).length, 2);
+  assert.strictEqual(ix.more, false);
+  const o = options({ home: h });
+  assert.deepStrictEqual(o.agents.map((a) => a.id), ['claude', 'codex', 'grok']);
+});
+
+test('chatList: the limit is clamped and "more" is reported', () => {
+  const { ph } = host({});
+  const l = ph.chatList({ limit: '1' }); // below the minimum of 20: both conversations come back
+  assert.strictEqual(l.chats.length, 2);
+  assert.strictEqual(l.more, false);
+  assert.ok(l.options.agents.length >= 2);
+});
+
+// ------------------------------------------------------------ OpenCode and Grok
+const OC_ID = 'ses_0123456789abcdef';
+function fakeDb(sessions, messages) {
+  return () => ({
+    prepare: (sql) => ({
+      all: (...a) => (/FROM session_v2/.test(sql) ? sessions.slice(0, a[0]) : /FROM session_message/.test(sql) ? messages.slice().reverse().slice(0, a[1]) : []),
+    }),
+    close() {},
+  });
+}
+const ocMessages = [
+  { type: 'synthetic', data: JSON.stringify({ text: 'AGENTS.md injected' }), time_created: 1 },
+  { type: 'user', data: JSON.stringify({ text: 'Why is the build slow?', time: { created: 1000 } }), time_created: 1000 },
+  { type: 'assistant', data: JSON.stringify({ content: [{ type: 'reasoning', text: 'hidden' }, { type: 'tool', name: 'read', state: { input: { filePath: 'a.js' } } }, { type: 'tool', name: 'grep', state: { input: { pattern: 'x' } } }, { type: 'text', text: 'It is the bundler.' }] }), time_created: 2000 },
+];
+
+test('OpenCode: chats listed and read through the database (reasoning and injected rows left out, tool calls collapsed)', () => {
+  const { h, cwd } = home();
+  const ix = new ChatIndex({ home: h, openDb: fakeDb([{ id: OC_ID, directory: cwd.replace(/\\/g, '/'), title: 'Build speed', time_updated: Date.now() - 5000 }], ocMessages) });
+  const l = ix.list();
+  const e = l.find((c) => c.agent === 'opencode');
+  assert.ok(e);
+  assert.strictEqual(e.key, `opencode:${OC_ID}`);
+  assert.strictEqual(e.title, 'Build speed');
+  assert.strictEqual(ix.find(`opencode:${OC_ID}`).id, OC_ID);
+  const r = ix.read(e, 40);
+  assert.deepStrictEqual(r.messages.map((m) => [m.role, m.text]), [['user', 'Why is the build slow?'], ['tool', 'read · a.js\ngrep · x'], ['assistant', 'It is the bundler.']]);
+  assert.strictEqual(ix.live(e), true); // updated a moment ago
+});
+
+test('OpenCode without the sqlite driver simply has no chats', () => {
+  const { h } = home();
+  const ix = new ChatIndex({ home: h, openDb: () => null });
+  assert.deepStrictEqual(ix.list().map((c) => c.agent).sort(), ['claude', 'codex']);
+});
+
+test('Grok: sessions listed from summary.json, transcript from chat_history.jsonl (wrapper stripped, injected rows and results left out)', () => {
+  const { h, cwd } = home();
+  const sid = '01a19feb-b5ae-78b1-8263-d0780d83199f';
+  const dir = path.join(h, '.grok', 'sessions', encodeURIComponent(cwd), sid);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({ info: { id: sid, cwd }, generated_title: 'Fix the flow', updated_at: '2026-11-22T10:00:00Z' }));
+  fs.writeFileSync(path.join(dir, 'chat_history.jsonl'), jl([
+    { type: 'system', content: 'You are Grok' },
+    { type: 'user', content: [{ type: 'text', text: 'injected' }], synthetic_reason: 'user_info' },
+    { type: 'user', content: [{ type: 'text', text: '<user_query>\nFix it\n</user_query>' }] },
+    { type: 'reasoning', encrypted_content: 'x' },
+    { type: 'assistant', content: 'Looking.', tool_calls: [{ name: 'read_file', arguments: JSON.stringify({ target_file: 'a.js' }) }] },
+    { type: 'tool_result', content: 'big output' },
+    { type: 'assistant', content: 'Done.' },
+  ]));
+  const ix = new ChatIndex({ home: h, openDb: () => null });
+  const e = ix.list().find((c) => c.agent === 'grok');
+  assert.ok(e);
+  assert.strictEqual(e.title, 'Fix the flow');
+  assert.deepStrictEqual(ix.read(e, 40).messages.map((m) => [m.role, m.text]), [['user', 'Fix it'], ['assistant', 'Looking.'], ['tool', 'read_file · a.js'], ['assistant', 'Done.']]);
+});
+
+test('options: OpenCode appears only with its CLI, Grok is history-only, models are provider/model from its own list', () => {
+  const h = tmp();
+  assert.deepStrictEqual(options({ home: h }).agents.map((a) => a.id), ['claude', 'codex', 'grok']);
+  const o = options({ home: h, opencode: { models: ['opencode/big-pickle', 'bad model;x', 'colab-qwen/qwen3'] } });
+  assert.deepStrictEqual(o.agents.map((a) => a.id), ['claude', 'codex', 'opencode', 'grok']);
+  assert.strictEqual(o.agents.find((a) => a.id === 'grok').chat, false);
+  assert.deepStrictEqual(o.opencode.models, ['opencode/big-pickle', 'colab-qwen/qwen3']);
+  assert.deepStrictEqual(choose(o, 'opencode', 'opencode/big-pickle', 'high'), { model: 'opencode/big-pickle', effort: 'high' });
+  assert.strictEqual(choose(o, 'opencode', 'unknown/model', ''), null);
+  assert.strictEqual(choose(o, 'opencode', 'opencode/big-pickle', 'ultra'), null);
+  assert.strictEqual(choose(o, 'grok', '', ''), null);
+});
+
+test('OpenCode runner: run --standalone with the prompt on stdin; plan agent without full permissions, --auto with it; copies and new chats learn the id from the stream', () => {
+  const dir = tmp();
+  const ro = runner(dir, 'edits', { opencode: () => 'C:\\oc\\opencode-cli.exe' });
+  const res = ro.r.resume({ agent: 'opencode', session: OC_ID, cwd: dir, prompt: 'go', model: 'opencode/big-pickle', effort: 'high' });
+  assert.strictEqual(res.ok, true);
+  assert.strictEqual(res.session, OC_ID);
+  const a = ro.f.calls[0].args;
+  assert.deepStrictEqual(a, ['run', '--standalone', '--format', 'json', '-m', 'opencode/big-pickle#high', '-s', OC_ID, '--agent', 'plan']);
+  assert.strictEqual(ro.f.calls[0].child.stdin.written, 'go');
+  const full = runner(dir, 'full', { opencode: () => 'oc.exe' });
+  full.r.resume({ agent: 'opencode', session: OC_ID, cwd: dir, prompt: 'x', fork: true });
+  assert.deepStrictEqual(full.f.calls[0].args.slice(-4), ['-s', OC_ID, '--fork', '--auto']);
+  full.f.calls[0].child.stdout.emit('data', JSON.stringify({ type: 'step_start', sessionID: OC_ID }) + '\n');
+  assert.strictEqual(full.r.list()[0].session, ''); // the old id is not the copy
+  full.f.calls[0].child.stdout.emit('data', JSON.stringify({ type: 'text', sessionID: 'ses_newcopy0123456', part: { text: 'hello' } }) + '\n');
+  assert.strictEqual(full.r.list()[0].session, 'ses_newcopy0123456');
+  assert.strictEqual(full.r.list()[0].text, 'hello');
+  assert.strictEqual(runner(dir, 'full', { opencode: () => null }).r.resume({ agent: 'opencode', session: OC_ID, cwd: dir, prompt: 'x' }).error, 'not installed');
+  assert.strictEqual(runner(dir, 'full', { opencode: () => 'oc.exe' }).r.resume({ agent: 'opencode', session: OC_ID, cwd: dir, prompt: 'x', model: 'noslash' }).error, 'model');
+});
+
+test('send: Grok is history only; an OpenCode conversation the dock did not start is copied first', () => {
+  const f = fakeSpawn();
+  const { h, cwd } = home();
+  const ix = new ChatIndex({ home: h, openDb: fakeDb([{ id: OC_ID, directory: cwd, title: 'T', time_updated: Date.now() - 3600000 }], ocMessages) });
+  const { ph } = host({ tasksFull: true }, { chatIndex: ix, chatOptions: () => options({ home: h, opencode: { models: ['opencode/big-pickle'] } }), taskOpts: { spawn: f.spawn, claude: () => 'c.exe', codex: () => 'x.js', opencode: () => 'oc.exe', kill: () => {} } });
+  assert.strictEqual(ph.canSend('grok'), false);
+  assert.strictEqual(ph.task({ op: 'send', key: 'grok:01a19feb-b5ae-78b1-8263-d0780d83199f', agent: 'grok', prompt: 'x' }).error, 'agent');
+  assert.strictEqual(ph.task({ op: 'start', agent: 'grok', dir: cwd, prompt: 'x' }).error, 'agent');
+  const r = ph.task({ op: 'send', key: `opencode:${OC_ID}`, agent: 'opencode', prompt: 'go', model: 'opencode/big-pickle' });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.fork, true);
+  assert.ok(f.calls[0].args.includes('--fork'));
+  assert.strictEqual(ph.chatRead({ key: `opencode:${OC_ID}` }).chat.canSend, true);
+});
+
+test('OpenCode read-only runs ignore the folder\'s own config and plugins; full permissions leave them alone', () => {
+  const dir = tmp();
+  const ro = runner(dir, 'edits', { opencode: () => 'oc.exe' });
+  ro.r.resume({ agent: 'opencode', session: OC_ID, cwd: dir, prompt: 'x' });
+  const env = ro.f.calls[0].opts.env;
+  assert.strictEqual(env.OPENCODE_DISABLE_PROJECT_CONFIG, '1');
+  assert.strictEqual(env.OPENCODE_CONFIG_PROJECT_DISABLE, '1');
+  assert.strictEqual(env.PWD, fs.realpathSync.native(dir));
+  const full = runner(dir, 'full', { opencode: () => 'oc.exe' });
+  full.r.resume({ agent: 'opencode', session: OC_ID, cwd: dir, prompt: 'x' });
+  assert.ok(!('OPENCODE_DISABLE_PROJECT_CONFIG' in full.f.calls[0].opts.env) || full.f.calls[0].opts.env.OPENCODE_DISABLE_PROJECT_CONFIG !== '1');
+});
+
+test('an OpenCode or Grok conversation beyond the page is still found by its exact id, and finding it does not replace the page', () => {
+  const { h, cwd } = home();
+  const sid = '01a19feb-b5ae-78b1-8263-d0780d83199f';
+  const dir = path.join(h, '.grok', 'sessions', encodeURIComponent(cwd), sid);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({ info: { id: sid, cwd }, generated_title: 'Old one', updated_at: '2020-01-01T00:00:00Z' }));
+  fs.writeFileSync(path.join(dir, 'chat_history.jsonl'), '');
+  const calls = [];
+  const openDb = () => ({
+    prepare: (sql) => ({
+      all: () => [],
+      get: (id) => { calls.push(id); return id === OC_ID ? { id: OC_ID, directory: cwd, title: 'Deep', time_updated: 5 } : undefined; },
+    }),
+    close() {},
+  });
+  const ix = new ChatIndex({ home: h, openDb });
+  ix.list(1); // a small page the phone is looking at
+  const page = ix.cache;
+  assert.strictEqual(ix.find(`grok:${sid}`).title, 'Old one');
+  assert.strictEqual(ix.find(`opencode:${OC_ID}`).title, 'Deep');
+  assert.strictEqual(ix.find('opencode:ses_doesnotexist0000'), null);
+  assert.strictEqual(ix.cache, page);
+  assert.strictEqual(ix.cacheLimit, 1);
+});
+
+test('the phone page\'s logo code never lets an id into markup or reach the prototype', () => {
+  const vm = require('vm');
+  const ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'mascots.js'), 'utf8'), ctx);
+  const svg = vm.runInContext('logoSvg("a\\"><script>x</script>", 20) + logoSvg("constructor", 20) + logoSvg("__proto__", 20) + logoSvg("claude", 20)', ctx);
+  assert.ok(!/<script/.test(svg));
+  assert.strictEqual((svg.match(/<svg /g) || []).length, 4);
+});
+
+test('reading a conversation is memoised per conversation, not per file (every OpenCode chat shares one database file)', () => {
+  const f = fakeSpawn();
+  const { h, cwd } = home();
+  const reads = [];
+  const openDb = () => ({
+    prepare: (sql) => ({
+      all: (...a) => (/FROM session_v2/.test(sql) ? [{ id: 'ses_aaaaaaaaaaaaaaaa', directory: cwd, title: 'A', time_updated: 7 }, { id: 'ses_bbbbbbbbbbbbbbbb', directory: cwd, title: 'B', time_updated: 7 }] : (reads.push(a[0]), [{ type: 'user', data: JSON.stringify({ text: 'hello ' + a[0] }), time_created: 1 }])),
+      get: () => undefined,
+    }),
+    close() {},
+  });
+  const { ph } = host({ tasksFull: true }, { chatIndex: new ChatIndex({ home: h, openDb }), chatOptions: () => options({ home: h }), taskOpts: { spawn: f.spawn, kill: () => {} } });
+  const a = ph.chatRead({ key: 'opencode:ses_aaaaaaaaaaaaaaaa' });
+  const b = ph.chatRead({ key: 'opencode:ses_bbbbbbbbbbbbbbbb' });
+  assert.strictEqual(a.messages[0].text, 'hello ses_aaaaaaaaaaaaaaaa');
+  assert.strictEqual(b.messages[0].text, 'hello ses_bbbbbbbbbbbbbbbb');
+});

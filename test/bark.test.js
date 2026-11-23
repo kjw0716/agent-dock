@@ -28,7 +28,7 @@ test('nothing is pushed for what was already there at start; a new waiting sessi
   assert.deepStrictEqual(n.observe([row('claude', 'Claude', [waiting])]), []); // start: seeded only
   assert.deepStrictEqual(n.observe([row('claude', 'Claude', [waiting])]), []);
   const fresh = n.observe([row('claude', 'Claude', [waiting, S('b', 'waiting', { ask: { id: 'q2', question: 'Another secret?' } })])]);
-  assert.deepStrictEqual(fresh, [{ title: 'Claude', body: 'Waiting for you' }]);
+  assert.deepStrictEqual(fresh, [{ title: 'Claude', body: 'Waiting for you', open: 'claude:b' }]); // `open` is a session id, never text
   assert.ok(!JSON.stringify(pushed).includes('secret'));
   assert.deepStrictEqual(n.observe([row('claude', 'Claude', [waiting, S('b', 'waiting', { ask: { id: 'q2' } })])]), []); // not twice
 });
@@ -40,7 +40,7 @@ test('finished and unread pushes; several at once become one message with a coun
   assert.deepStrictEqual(out, [{ title: 'Codex', body: 'Finished (2)' }]);
   const zh = new Notifier({ push() {} });
   zh.observe([row('codex', 'Codex', [])]);
-  assert.deepStrictEqual(zh.observe([row('codex', 'Codex', [S('x', 'waiting', { ask: { id: 'q' } })])], 'zh'), [{ title: 'Codex', body: '等你回答' }]);
+  assert.deepStrictEqual(zh.observe([row('codex', 'Codex', [S('x', 'waiting', { ask: { id: 'q' } })])], 'zh'), [{ title: 'Codex', body: '等你回答', open: 'codex:x' }]);
 });
 
 test('a storm is capped: at most SEND_MAX pushes a minute', () => {

@@ -14,128 +14,109 @@
   :root { --bg: #14161b; --card: #1b1e25; --line: rgba(255,255,255,.08); --text: #f2f3f5; --muted: #8b919c; --working: #5aa9ff; --waiting: #ffb020; --done: #3ddc97; }
   * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
   html, body { background: var(--bg); color: var(--text); }
-  body { font: 15px/1.35 -apple-system, "SF Pro Text", "PingFang SC", "Segoe UI", system-ui, sans-serif; padding: env(safe-area-inset-top) 0 calc(64px + env(safe-area-inset-bottom)); min-height: 100vh; }
-  button, input { font: inherit; color: inherit; }
-  button { background: none; border: 0; cursor: pointer; }
-  header { position: sticky; top: 0; z-index: 5; background: rgba(20,22,27,.92); backdrop-filter: blur(12px); padding: 12px 16px 8px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--line); }
+  body { font: 15px/1.35 -apple-system, "SF Pro Text", "PingFang SC", "Segoe UI", system-ui, sans-serif; padding: env(safe-area-inset-top) 0 calc(20px + env(safe-area-inset-bottom)); min-height: 100vh; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  button { background: none; border: 0; cursor: pointer; text-align: left; }
+  header { position: sticky; top: 0; z-index: 5; background: rgba(20,22,27,.94); backdrop-filter: blur(12px); padding: 10px 14px 8px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); min-height: 52px; }
   header h1 { font-size: 20px; font-weight: 700; }
-  header .sub { color: var(--muted); font-size: 12.5px; }
-  main { padding: 12px 14px 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; background: rgba(27,30,37,.96); backdrop-filter: blur(12px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-  nav button { flex: 1; padding: 12px 0 10px; color: var(--muted); font-size: 12px; display: grid; justify-items: center; gap: 3px; }
-  nav button.on { color: var(--text); }
-  nav svg { width: 22px; height: 22px; }
+  header .sub { color: var(--muted); font-size: 12.5px; flex: 1; }
+  header .btn { padding: 7px 13px; }
+  #toast { position: fixed; left: 14px; right: 14px; top: calc(62px + env(safe-area-inset-top)); z-index: 9; background: #2a2e38; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 14px; display: none; }
+  main { padding: 12px 14px 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
-  .head { display: flex; align-items: center; gap: 12px; padding: 14px 14px; width: 100%; text-align: left; }
-  .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
-  .name { font-weight: 650; font-size: 16px; }
-  .meta { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
   .grow { flex: 1; min-width: 0; }
-  .chip { font-size: 12px; font-weight: 650; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+  .name { font-weight: 650; font-size: 16px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { font-size: 12px; font-weight: 650; padding: 4px 10px; border-radius: 999px; white-space: nowrap; flex: none; }
   .chip.working { color: var(--working); background: rgba(90,169,255,.15); }
   .chip.waiting { color: var(--waiting); background: rgba(255,176,32,.17); }
   .chip.done { color: var(--done); background: rgba(61,220,151,.14); }
-  .sessions { border-top: 1px solid var(--line); }
-  .s { display: flex; align-items: center; gap: 10px; padding: 10px 14px; font-size: 14px; }
-  .s + .s { border-top: 1px solid rgba(255,255,255,.05); }
-  .s i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .s i.working { background: var(--working); } .s i.waiting { background: var(--waiting); } .s i.done { background: var(--done); opacity: .6; }
-  .s .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .s .w { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
-  .s.unread .t { font-weight: 650; }
-  .ask { margin: 4px 12px 12px; padding: 12px; border-radius: 14px; background: rgba(255,176,32,.09); border: 1px solid rgba(255,176,32,.25); }
-  .ask.fin { background: rgba(61,220,151,.07); border-color: rgba(61,220,151,.28); }
+  .logo { display: inline-flex; flex: none; }
+  .logo svg { width: 100%; height: 100%; display: block; }
+  .chatrow { display: flex; align-items: center; gap: 12px; padding: 11px 14px; width: 100%; }
+  .chatrow .unread { width: 9px; height: 9px; border-radius: 50%; background: var(--done); flex: none; }
+  .ttl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+  .ask { margin: 0 12px 12px; padding: 12px; border-radius: 14px; background: rgba(255,176,32,.09); border: 1px solid rgba(255,176,32,.25); }
   .ask .q { font-weight: 650; }
   .ask .recap { color: var(--muted); font-size: 13.5px; margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 14em; overflow-y: auto; }
   .opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .btn { padding: 9px 14px; border-radius: 10px; background: rgba(255,255,255,.1); font-size: 14px; }
   .btn:active { background: rgba(255,255,255,.2); }
   .btn.primary { background: var(--waiting); color: #1a1405; font-weight: 650; }
-  .btn:disabled, input:disabled { opacity: .45; }
+  .btn:disabled, input:disabled, select:disabled { opacity: .45; }
   .row { display: flex; gap: 8px; margin-top: 10px; }
   .row input { flex: 1; min-width: 0; font-size: 16px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0,0,0,.3); outline: none; }
-  .row input:focus { border-color: rgba(255,176,32,.6); }
+  .row input:focus, textarea:focus { border-color: rgba(255,176,32,.6); }
   .note { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
   .note.bad { color: #ff9b8f; } .note.ok { color: var(--done); }
   .empty, .center { color: var(--muted); text-align: center; padding: 40px 20px; }
   .center h2 { color: var(--text); font-size: 18px; margin-bottom: 8px; }
-  .seg { display: inline-flex; background: rgba(255,255,255,.07); border-radius: 10px; padding: 2px; }
-  .seg button { padding: 6px 12px; border-radius: 8px; color: var(--muted); font-size: 13px; }
-  .seg button.on { background: rgba(255,255,255,.14); color: var(--text); }
-  .sum { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .sum .card { padding: 12px 14px; }
-  .sum b { display: block; font-size: 24px; font-weight: 650; letter-spacing: -.01em; }
-  .sum span { color: var(--muted); font-size: 12.5px; }
-  .warn { color: var(--waiting); }
-  .ag { padding: 12px 14px; }
-  .ag .top { display: flex; align-items: baseline; gap: 10px; }
-  .ag .num { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
-  .ag svg { display: block; width: 100%; height: 40px; margin-top: 8px; }
-  .toolbar { display: flex; align-items: center; justify-content: space-between; }
-  .small { color: var(--muted); font-size: 12.5px; }
-  select, textarea { font: inherit; font-size: 16px; color: var(--text); background: rgba(0,0,0,.3); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; width: 100%; outline: none; }
+  select, textarea { font-size: 16px; color: var(--text); background: rgba(0,0,0,.3); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; width: 100%; outline: none; }
   .row select { flex: 1; min-width: 0; }
   textarea { margin-top: 10px; resize: vertical; }
-  .chatrow { display: flex; align-items: center; gap: 12px; padding: 12px 14px; width: 100%; text-align: left; }
-  .ttl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
-  .chathead { display: flex; align-items: center; gap: 10px; position: sticky; top: 46px; z-index: 4; background: var(--bg); padding: 4px 0 6px; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .fchip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.07); color: var(--muted); font-size: 13px; white-space: nowrap; flex: none; }
+  .fchip.on { background: rgba(255,255,255,.17); color: var(--text); }
+  .agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin-top: 10px; }
+  .agentbtn { display: grid; justify-items: center; gap: 6px; padding: 10px 6px; border-radius: 14px; background: rgba(255,255,255,.06); border: 1px solid transparent; font-size: 13px; text-align: center; }
+  .agentbtn.on { border-color: var(--waiting); background: rgba(255,176,32,.12); }
+  .chathead { display: flex; align-items: center; gap: 10px; position: sticky; top: 52px; z-index: 4; background: var(--bg); padding: 4px 0 6px; }
   .msgs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .composer .row { min-width: 0; }
-  .composer .row > * { min-width: 0; }
   .msg { padding: 10px 13px; border-radius: 14px; font-size: 15px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 92%; line-height: 1.4; }
   .msg.user { justify-self: end; background: rgba(255,176,32,.16); border: 1px solid rgba(255,176,32,.28); }
   .msg.assistant { justify-self: start; background: var(--card); border: 1px solid var(--line); }
   .msg.tool { justify-self: start; background: none; color: var(--muted); font: 12px/1.35 ui-monospace, "SF Mono", Menlo, Consolas, monospace; padding: 2px 4px; max-width: 100%; }
   .msg.working { justify-self: start; color: var(--working); background: rgba(90,169,255,.1); font-size: 13px; padding: 6px 12px; }
-  main.inchat { padding-bottom: 210px; }
-  .composer { position: fixed; left: 0; right: 0; bottom: calc(62px + env(safe-area-inset-bottom)); z-index: 5; background: rgba(20,22,27,.97); border-top: 1px solid var(--line); padding: 8px 14px 10px; }
+  main.inchat { padding-bottom: 230px; }
+  .composer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: rgba(20,22,27,.97); border-top: 1px solid var(--line); padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); }
   .composer textarea { margin-top: 4px; min-height: 52px; max-height: 30vh; }
-  .composer .row { margin-top: 8px; }
+  .composer .row { margin-top: 8px; min-width: 0; }
+  .composer .row > * { min-width: 0; }
   .composer .row select { font-size: 14px; padding: 8px; }
   .composer .btn { flex: none; }
+  .composer .ask { margin: 0 0 8px; max-height: 38vh; overflow-y: auto; }
 </style>
 </head>
 <body>
-<header><h1 id="title">Agent Dock</h1><span class="sub" id="sub"></span></header>
+<header><h1 id="title">Agent Dock</h1><span class="sub" id="sub"></span><button class="btn" id="bell" style="display:none;padding:7px 11px;font-size:16px"></button><button class="btn primary" id="newbtn" style="display:none"></button></header><div id="toast" role="status"></div>
 <main id="main"></main>
-<nav>
-  <button data-tab="agents" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="6" rx="2"/><rect x="4" y="13" width="16" height="6" rx="2"/></svg><span id="t-agents"></span></button>
-  <button data-tab="chats" id="tab-chats" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14v10H9l-4 3z"/></svg><span id="t-chats"></span></button>
-</nav>
+<script src="/mascots.js"></script>
 <script>
 'use strict';
 const I18N = {
   en: {
-    agents: 'Agents', working: 'Working', waiting: 'Waiting', done: 'Done', empty: 'No agents running',
-    now: 'just now', min: (n) => n + ' min', hour: (n) => n + ' h', day: (n) => n + ' d', ago: 'ago',
-    finished: 'finished', send: 'Send', dismiss: 'Dismiss', noReply: 'No reply', placeholder: 'Type an answer…', replyPlaceholder: 'Reply to the agent…',
-    sent: 'Sent', failed: 'Not sent', disabled: 'Answering from the phone is turned off in the dock.', insecure: 'Open this page through your Tailscale address to answer.',
+    stWorking: 'Working', stWaiting: 'Waiting', stDone: 'Done', now: 'just now', min: (n) => n + ' min', hour: (n) => n + ' h', day: (n) => n + ' d', ago: 'ago',
+    send: 'Send', finished: 'finished', noReply: 'No reply', replyPlaceholder: 'Reply to the agent…', dismiss: 'Dismiss', placeholder: 'Type an answer…', sent: 'Sent', failed: 'Not sent', loading: 'Loading…',
+    disabled: 'Answering from the phone is turned off in the dock.', insecure: 'Open this page through your Tailscale address to answer.',
     noChannel: 'This agent can only be answered on the computer.', notInstalled: 'Turn on Answer from the dock in the dock settings.', notLoaded: 'This session started before the plugin was installed.',
-    chats: 'Chats', newChat: 'New chat', back: 'Back', start: 'Start', stop: 'Stop', folder: 'Folder', model: 'Model', effort: 'Thinking', modelDefault: 'Default model', effortDefault: 'Default thinking', noChats: 'No conversations yet', noMessages: 'No messages yet', noFolders: 'No folder is allowed yet. Add one in the dock settings on your computer.', running: 'Working', working: 'Working…', live: 'Open on PC', forkNote: 'Open on the computer: your message continues in a copy.', liveCodex: 'This conversation is active on the computer. Try again in a few minutes.', older: 'Earlier messages', typeMsg: 'Message…', promptPh: 'What should the agent do?', lastFailed: 'Last turn failed', insecure2: 'Open this page through your Tailscale address to send messages.', codexRO: 'Codex chats are read-only unless Full permissions is on at the computer.', chatErr: { disabled: 'Chats from the phone are turned off in the dock.', insecure: 'Open this page through your Tailscale address to use chats.', folder: 'That folder is not allowed.', outside: 'Turn on Full permissions at the computer to continue a conversation outside the allowed folders.', busy: 'This conversation or the computer is already busy.', live: 'This conversation is active on the computer. Try again in a few minutes.', model: 'That model or thinking level is not available.', prompt: 'The text is empty or too long.', 'not installed': 'The agent is not installed on the computer.', 'not found': 'That conversation was not found.', offline: 'The computer cannot be reached.' },
+    newChat: 'New', newTitle: 'New chat', back: 'Back', start: 'Start', stop: 'Stop', folder: 'Folder', model: 'Model', effort: 'Thinking', modelDefault: 'Default model', effortDefault: 'Default thinking',
+    all: 'All', noChats: 'Nothing here yet', noMessages: 'No messages yet', noFolders: 'No folder is allowed yet. Add one in the dock settings on your computer.', typing: 'Working…', live: 'Open on PC',
+    forkNote: 'Open on the computer: your message continues in a copy.', loadMore: 'Load more', older: 'Earlier messages', typeMsg: 'Message…', promptPh: 'What should the agent do?', lastFailed: 'Last turn failed', historyOnly: 'This agent can only be read from the phone, not written to.',
+    insecure2: 'Open this page through your Tailscale address to send messages.', readOnly: 'This agent runs read-only unless Full permissions is on at the computer.', pickAgent: 'Agent', chatsOff: 'Chats are turned off in the dock settings.',
+    chatErr: { disabled: 'Chats from the phone are turned off in the dock.', insecure: 'Open this page through your Tailscale address to use chats.', folder: 'That folder is not allowed.', outside: 'Turn on Full permissions at the computer to continue a conversation outside the allowed folders.', busy: 'This conversation or the computer is already busy.', live: 'This conversation is active on the computer. Try again in a few minutes.', model: 'That model or thinking level is not available.', prompt: 'The text is empty or too long.', 'not installed': 'The agent is not installed on the computer.', 'not found': 'That conversation was not found.', offline: 'The computer cannot be reached.', agent: 'That agent cannot start chats from the phone.' },
     unpaired: 'Not paired', unpairedText: 'Open Settings in Agent Dock on your computer, press Pair a phone, and scan the code with the camera.',
-    pairing: 'Pairing…', pairFailed: 'The pairing code expired or was already used. Press Pair a phone again on your computer.',
-    offline: 'The computer cannot be reached.', retry: 'Retry',
-    loading: 'Loading…',
+    pushOnMsg: 'Turn on notifications', pushOffMsg: 'Turn off notifications', pushOnDone: 'Notifications are on for this phone.', pushOffDone: 'Notifications are off for this phone.', pushDenied: 'Notifications are blocked for this page. Allow them in the phone settings.', pushUnsupported: 'This browser cannot receive notifications.', pushNeedsHome: 'On iPhone, add this page to the Home Screen and open it from there to turn on notifications.', pushFailed: 'Could not turn notifications on.',
+    pairing: 'Pairing…', pairFailed: 'The pairing code expired or was already used. Press Pair a phone again on your computer.', offline: 'The computer cannot be reached.', retry: 'Retry',
   },
   zh: {
-    agents: 'Agent', working: '工作中', waiting: '等你', done: '已完成', empty: '没有运行中的 Agent',
-    now: '刚刚', min: (n) => n + ' 分钟', hour: (n) => n + ' 小时', day: (n) => n + ' 天', ago: '前',
-    finished: '已完成', send: '发送', dismiss: '忽略', noReply: '不回复', placeholder: '输入回答…', replyPlaceholder: '给 Agent 回复…',
-    sent: '已发送', failed: '未发送', disabled: 'Dock 里关闭了手机回答。', insecure: '请通过 Tailscale 地址打开这个页面才能回答。',
+    stWorking: '工作中', stWaiting: '等你', stDone: '已完成', now: '刚刚', min: (n) => n + ' 分钟', hour: (n) => n + ' 小时', day: (n) => n + ' 天', ago: '前',
+    send: '发送', finished: '已完成', noReply: '不回复', replyPlaceholder: '给 Agent 回复…', dismiss: '忽略', placeholder: '输入回答…', sent: '已发送', failed: '未发送', loading: '加载中…',
+    disabled: 'Dock 里关闭了手机回答。', insecure: '请通过 Tailscale 地址打开这个页面才能回答。',
     noChannel: '这个 Agent 只能在电脑上回答。', notInstalled: '请在 Dock 设置里打开「在窗口里回答」。', notLoaded: '这个会话在安装插件之前就开始了。',
-    chats: '对话', newChat: '新对话', back: '返回', start: '开始', stop: '停止', folder: '文件夹', model: '模型', effort: '思考', modelDefault: '默认模型', effortDefault: '默认思考', noChats: '还没有对话', noMessages: '还没有消息', noFolders: '还没有允许的文件夹。请在电脑上的 Dock 设置里添加。', running: '进行中', working: '正在回复…', live: '电脑上打开', forkNote: '这个对话在电脑上打开着：你的消息会在一个副本里继续。', liveCodex: '这个对话正在电脑上使用，请几分钟后再试。', older: '更早的消息', typeMsg: '发消息…', promptPh: '让 Agent 做什么？', lastFailed: '上一轮失败', insecure2: '请通过 Tailscale 地址打开这个页面才能发消息。', codexRO: '电脑上没开启完全权限时，Codex 对话是只读的。', chatErr: { disabled: 'Dock 里关闭了手机上的对话。', insecure: '请通过 Tailscale 地址打开这个页面才能使用对话。', folder: '这个文件夹不在允许列表里。', outside: '要在允许文件夹之外继续对话，请在电脑上打开完全权限。', busy: '这个对话或电脑正忙。', live: '这个对话正在电脑上使用，请几分钟后再试。', model: '这个模型或思考档位不可用。', prompt: '内容为空或太长。', 'not installed': '电脑上没有安装这个 Agent。', 'not found': '找不到这个对话。', offline: '连不上电脑。' },
+    newChat: '新建', newTitle: '新对话', back: '返回', start: '开始', stop: '停止', folder: '文件夹', model: '模型', effort: '思考', modelDefault: '默认模型', effortDefault: '默认思考',
+    all: '全部', noChats: '这里还没有内容', noMessages: '还没有消息', noFolders: '还没有允许的文件夹。请在电脑上的 Dock 设置里添加。', typing: '正在回复…', live: '电脑上打开',
+    forkNote: '这个对话在电脑上打开着：你的消息会在一个副本里继续。', loadMore: '加载更多', older: '更早的消息', typeMsg: '发消息…', promptPh: '让 Agent 做什么？', lastFailed: '上一轮失败', historyOnly: '这个 Agent 在手机上只能查看，不能发消息。',
+    insecure2: '请通过 Tailscale 地址打开这个页面才能发消息。', readOnly: '电脑上没开启完全权限时，这个 Agent 是只读的。', pickAgent: 'Agent', chatsOff: 'Dock 设置里关闭了对话功能。',
+    chatErr: { disabled: 'Dock 里关闭了手机上的对话。', insecure: '请通过 Tailscale 地址打开这个页面才能使用对话。', folder: '这个文件夹不在允许列表里。', outside: '要在允许文件夹之外继续对话，请在电脑上打开完全权限。', busy: '这个对话或电脑正忙。', live: '这个对话正在电脑上使用，请几分钟后再试。', model: '这个模型或思考档位不可用。', prompt: '内容为空或太长。', 'not installed': '电脑上没有安装这个 Agent。', 'not found': '找不到这个对话。', offline: '连不上电脑。', agent: '这个 Agent 还不能从手机发起对话。' },
     unpaired: '还没有配对', unpairedText: '在电脑上打开 Agent Dock 的设置，点「配对手机」，用相机扫描二维码。',
-    pairing: '正在配对…', pairFailed: '配对码已过期或已用过。请在电脑上重新点「配对手机」。',
-    offline: '连不上电脑。', retry: '重试',
-    loading: '加载中…',
+    pushOnMsg: '开启通知', pushOffMsg: '关闭通知', pushOnDone: '这台手机的通知已开启。', pushOffDone: '这台手机的通知已关闭。', pushDenied: '这个页面的通知被禁止了，请在手机设置里允许。', pushUnsupported: '这个浏览器不能接收通知。', pushNeedsHome: 'iPhone 需要先把这个页面添加到主屏幕，再从主屏幕图标打开，才能开启通知。', pushFailed: '没能开启通知。',
+    pairing: '正在配对…', pairFailed: '配对码已过期或已用过。请在电脑上重新点「配对手机」。', offline: '连不上电脑。', retry: '重试',
   },
 };
 const lang = /^zh/i.test(navigator.language || '') ? 'zh' : 'en';
 document.documentElement.lang = lang;
 const t = (k, ...a) => { const v = I18N[lang][k]; return typeof v === 'function' ? v(...a) : v; };
-const COLORS = { claude: '#ee8b6e', codex: '#3fcfa3', gemini: '#6aa5ff', kilo: '#ffe066', mimo: '#ff8a4c', copilot: '#d4d8e2' };
-const FALLBACK = ['#b4a0ff', '#6ee7d8', '#f2a65a', '#9bd35a', '#ff8fab', '#8ab4ff'];
-const color = (id) => COLORS[id] || FALLBACK[[...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 0) % FALLBACK.length];
 
 // a tiny element builder: text is always set as text, never as HTML
 function h(tag, attrs, ...kids) {
@@ -151,19 +132,39 @@ function h(tag, attrs, ...kids) {
   return el;
 }
 const $ = (id) => document.getElementById(id);
-
+// The agent's bot (from mascots.js, drawn from constants there) parsed as SVG, not inserted as HTML.
+function logo(id, px = 36) {
+  const safe = /^[a-z0-9_-]{1,24}$/.test(String(id)) ? String(id) : 'x';
+  const doc = new DOMParser().parseFromString(logoSvg(safe, px), 'image/svg+xml');
+  const w = h('span', { class: 'logo', style: `width:${px}px;height:${px}px` });
+  w.append(document.importNode(doc.documentElement, true));
+  return w;
+}
 function since(ms) {
   const m = Math.floor((Date.now() - ms) / 60000);
   if (m < 1) return t('now');
   const v = m < 60 ? t('min', m) : m < 1440 ? t('hour', Math.floor(m / 60)) : t('day', Math.floor(m / 1440));
   return lang === 'zh' ? v + t('ago') : v + ' ' + t('ago');
 }
+const store = {
+  get(k, d) { try { const v = JSON.parse(localStorage.getItem('dock.' + k)); return v == null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('dock.' + k, JSON.stringify(v)); } catch {} },
+};
 
-let tab = 'agents';
 let state = null; // last /api/state
-let open = new Set();
+let chats = null; // last /api/chats ({ ok:false } when chats are off)
+let view = { mode: 'home' }; // home | new | chat { key, task, agent }
+let chatData = null; // last /api/chat
+let listLimit = 40;
+let chatLimit = 40;
+let filter = 'all';
+let pendingMsg = null; // the message just sent, shown until the transcript has it
+let composerText = '';
+const newDraft = { agent: 'claude', dir: '', text: '' };
+const picks = store.get('picks', {});
 const drafts = new Map();
 let busy = false;
+let lastSig = '';
 
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' });
@@ -171,6 +172,18 @@ async function api(path, body) {
   try { json = await r.json(); } catch {}
   return { status: r.status, json };
 }
+const errMsg = (r) => {
+  const j = r.json || {};
+  const key = r.status === 403 && j.error === 'insecure' ? 'insecure' : j.error;
+  return t('chatErr')[key] || t('failed') + (key ? ' · ' + key : '');
+};
+const chatsOn = () => !!(state && state.features && state.features.tasks);
+const agentName = (id) => {
+  const a = chats && chats.ok && (chats.options.agents || []).find((x) => x.id === id);
+  if (a) return a.name;
+  const r = state && (state.rows || []).find((x) => x.id === id);
+  return r ? r.name : id;
+};
 
 // ------------------------------------------------------------------ pairing
 async function pairFromUrl() {
@@ -185,8 +198,7 @@ async function pairFromUrl() {
   return true;
 }
 
-// ------------------------------------------------------------------ agents
-const stateOrder = { waiting: 0, working: 1, done: 2 };
+// ------------------------------------------------------------------ questions (answer / dismiss)
 function noteFor(card, features, secure, agentId) {
   if (agentId !== 'claude') return t('noChannel');
   if (!features.answer) return t('disabled');
@@ -212,150 +224,159 @@ async function doAnswer(card, el, body) {
   n.textContent = ok ? t('sent') : t('failed') + (r.json && r.json.error && r.json.error !== 'closed' ? ' · ' + r.json.error : '');
   if (ok) setTimeout(poll, 800);
 }
-function cardEl(agent, s, kind) {
-  const a = kind === 'reply' ? s.reply : s.ask;
-  const can = !!(a.canAnswer && state.features.answer && state.secure && agent.id === 'claude' && !(a.sent && (a.sent.state === 'sending' || a.sent.state === 'sent')));
-  const card = { sid: s.id, aid: a.id, kind };
-  const el = h('div', { class: 'ask' + (kind === 'reply' ? ' fin' : '') });
-  if (kind === 'reply') {
-    el.append(h('div', { class: 'q' }, (s.label || agent.name) + ' · ' + t('finished')), h('div', { class: 'recap' }, a.text));
-    el.append(h('div', { class: 'opts' }, h('button', { class: 'btn', onclick: async () => { await api('/api/dismiss', { agent: agent.id, id: s.id }); poll(); } }, t('noReply'))));
-  } else {
-    el.append(h('div', { class: 'q' }, a.question));
-    if (a.recap) el.append(h('div', { class: 'recap' }, a.recap));
-    const opts = h('div', { class: 'opts' });
-    (a.options || []).forEach((o, i) => {
-      const disabled = !can || (o.appAction && !o.message);
-      opts.append(h('button', { class: 'btn' + (i === 0 ? ' primary' : ''), disabled, onclick: () => doAnswer(card, el, { option: i }) }, o.label));
-    });
-    opts.append(h('button', { class: 'btn', onclick: async () => { await api('/api/dismiss', { agent: agent.id, id: s.id, askId: a.id }); poll(); } }, t('dismiss')));
-    el.append(opts);
-  }
-  if (agent.id === 'claude') {
-    const input = h('input', { placeholder: kind === 'reply' ? t('replyPlaceholder') : t('placeholder'), maxlength: '2000', disabled: !can, enterkeyhint: 'send' });
+function askEl(agentId, s) {
+  const a = s.ask;
+  const can = !!(a.canAnswer && state.features.answer && state.secure && agentId === 'claude' && !(a.sent && (a.sent.state === 'sending' || a.sent.state === 'sent')));
+  const card = { sid: s.id, aid: a.id };
+  const el = h('div', { class: 'ask', 'data-aid': a.id });
+  el.append(h('div', { class: 'q' }, a.question));
+  if (a.recap) el.append(h('div', { class: 'recap' }, a.recap));
+  const opts = h('div', { class: 'opts' });
+  (a.options || []).forEach((o, i) => {
+    const disabled = !can || (o.appAction && !o.message);
+    opts.append(h('button', { class: 'btn' + (i === 0 ? ' primary' : ''), disabled, onclick: () => doAnswer(card, el, { option: i }) }, o.label));
+  });
+  opts.append(h('button', { class: 'btn', onclick: async () => { await api('/api/dismiss', { agent: agentId, id: s.id, askId: a.id }); poll(); } }, t('dismiss')));
+  el.append(opts);
+  if (agentId === 'claude') {
+    const input = h('input', { placeholder: t('placeholder'), maxlength: '2000', disabled: !can, enterkeyhint: 'send' });
     if (drafts.has(a.id)) input.value = drafts.get(a.id);
     input.addEventListener('input', () => drafts.set(a.id, input.value));
     const go = () => { if (input.value.trim()) doAnswer(card, el, { custom: input.value }); };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
     el.append(h('div', { class: 'row' }, input, h('button', { class: 'btn primary', disabled: !can, onclick: go }, t('send'))));
   }
-  const note = noteFor(a, state.features, state.secure, agent.id);
+  const note = noteFor(a, state.features, state.secure, agentId);
   if (note) el.append(h('div', { class: 'note' }, note));
   return el;
 }
-function renderAgents() {
-  const main = $('main');
-  if (!state) return;
-  const rows = state.rows || [];
-  const out = [];
-  if (!rows.length) out.push(h('div', { class: 'empty' }, t('empty')));
-  for (const r of rows) {
-    const count = (st) => r.sessions.filter((s) => s.state === st).length;
-    const isOpen = open.has(r.id) || r.sessions.some((s) => s.ask || (s.unread && s.reply));
-    const head = h('button', { class: 'head', onclick: () => { open.has(r.id) ? open.delete(r.id) : open.add(r.id); renderAgents(); } },
-      h('span', { class: 'dot', style: 'background:' + color(r.id) }),
-      h('span', { class: 'grow' }, h('div', { class: 'name' }, r.name), h('div', { class: 'meta' }, [t('working') + ' ' + count('working'), t('waiting') + ' ' + count('waiting'), t('done') + ' ' + count('done')].join(' · '))),
-      h('span', { class: 'chip ' + r.state }, t(r.state)));
-    const card = h('div', { class: 'card' }, head);
-    if (isOpen) {
-      const list = h('div', { class: 'sessions' });
-      const sess = r.sessions.slice().sort((a, b) => stateOrder[a.state] - stateOrder[b.state] || b.since - a.since);
-      for (const s of sess) {
-        list.append(h('div', { class: 's' + (s.unread ? ' unread' : '') }, h('i', { class: s.state }), h('span', { class: 't' }, s.label || r.name), h('span', { class: 'w' }, t(s.state) + ' · ' + since(s.since))));
-        if (s.ask) list.append(cardEl(r, s, 'ask'));
-        else if (s.unread && s.reply) list.append(cardEl(r, s, 'reply'));
-      }
-      card.append(list);
-    }
-    out.push(card);
+// a finished turn nobody has looked at: send a follow-up, or "no reply" (rows without a transcript to open)
+function replyEl(agentId, s) {
+  const a = s.reply;
+  const can = !!(a.canAnswer && state.features.answer && state.secure && agentId === 'claude' && !(a.sent && (a.sent.state === 'sending' || a.sent.state === 'sent')));
+  const card = { sid: s.id, aid: a.id, kind: 'reply' };
+  const el = h('div', { class: 'ask fin', 'data-aid': a.id });
+  el.append(h('div', { class: 'q' }, (s.label || agentName(agentId)) + ' · ' + t('finished')), h('div', { class: 'recap' }, a.text));
+  el.append(h('div', { class: 'opts' }, h('button', { class: 'btn', onclick: async () => { await api('/api/dismiss', { agent: agentId, id: s.id }); poll(); } }, t('noReply'))));
+  if (agentId === 'claude') {
+    const input = h('input', { placeholder: t('replyPlaceholder'), maxlength: '2000', disabled: !can, enterkeyhint: 'send' });
+    if (drafts.has(a.id)) input.value = drafts.get(a.id);
+    input.addEventListener('input', () => drafts.set(a.id, input.value));
+    const go = () => { if (input.value.trim()) doAnswer(card, el, { custom: input.value }); };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    el.append(h('div', { class: 'row' }, input, h('button', { class: 'btn primary', disabled: !can, onclick: go }, t('send'))));
   }
-  // keep what is being typed
-  const focused = document.activeElement && document.activeElement.tagName === 'INPUT' ? document.activeElement.value : null;
-  main.replaceChildren(...out);
-  if (focused !== null) { const i = main.querySelector('input:not([disabled])'); if (i && !i.value) i.value = focused; }
-  const waiting = rows.reduce((n, r) => n + r.sessions.filter((s) => s.state === 'waiting').length, 0);
-  $('sub').textContent = waiting ? t('waiting') + ' ' + waiting : '';
+  const note = noteFor(a, state.features, state.secure, agentId);
+  if (note) el.append(h('div', { class: 'note' }, note));
+  return el;
+}
+const sessionOf = (key) => {
+  const [agent, id] = String(key).split(':');
+  const r = state && (state.rows || []).find((x) => x.id === agent);
+  const s = r && r.sessions.find((x) => x.id === id);
+  return s ? { r, s } : null;
+};
+
+// ------------------------------------------------------------------ home: one list of every conversation
+function items() {
+  const out = [];
+  const seen = new Set();
+  const live = new Map();
+  for (const r of state.rows || []) for (const s of r.sessions) if (!s.labelKey) live.set(r.id + ':' + s.id, { r, s });
+  if (chats && chats.ok) {
+    for (const c of chats.chats) {
+      const m = live.get(c.key);
+      seen.add(c.key);
+      out.push({ key: c.key, agent: c.agent, title: c.title, project: c.project, at: Math.max(c.at, m ? m.s.since : 0), live: c.live, running: c.running || !!(m && m.s.state === 'working'), waiting: !!(m && m.s.state === 'waiting'), unread: !!(m && m.s.unread && m.s.reply), s: m && m.s });
+    }
+  }
+  for (const [k, { r, s }] of live) {
+    if (seen.has(k)) continue;
+    // not among the newest transcripts, but the dock can still find it by its id: tap to open (resolved on the computer, never a path)
+    const key = chatsOn() && ['claude', 'codex', 'opencode'].includes(r.id) && /^[A-Za-z0-9][A-Za-z0-9_-]{6,80}$/.test(String(s.id)) ? r.id + ':' + s.id : null;
+    out.push({ key, agent: r.id, title: s.label || r.name, project: '', at: s.since, running: s.state === 'working', waiting: s.state === 'waiting', unread: !!(s.unread && s.reply), s });
+  }
+  out.sort((a, b) => (b.waiting - a.waiting) || b.at - a.at);
+  return out;
 }
 
-// ------------------------------------------------------------------ chats
-// Everything below sets text with textContent only (see h()); transcript text is never turned into HTML.
-const store = {
-  get(k, d) { try { const v = JSON.parse(localStorage.getItem('dock.' + k)); return v == null ? d : v; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('dock.' + k, JSON.stringify(v)); } catch {} },
-};
-let chats = null; // last /api/chats
-let view = { mode: 'list' }; // list | new | chat { key, pending, agent }
-let chatData = null; // last /api/chat
-let chatLimit = 40;
-let pendingMsg = null; // the message just sent, shown until the transcript has it
-const picks = store.get('picks', {});
-const newDraft = { agent: 'claude', dir: '', text: '' };
-let composerText = '';
+function renderHome() {
+  const main = $('main');
+  main.classList.remove('inchat');
+  $('newbtn').style.display = chatsOn() ? '' : 'none';
+  $('newbtn').textContent = '+ ' + t('newChat');
+  const all = items();
+  const agents = [...new Set(all.map((i) => i.agent))];
+  if (filter !== 'all' && !agents.includes(filter)) filter = 'all';
+  const list = all.filter((i) => filter === 'all' || i.agent === filter);
+  const els = [];
+  if (agents.length > 1) {
+    els.push(h('div', { class: 'chips' },
+      h('button', { class: 'fchip' + (filter === 'all' ? ' on' : ''), onclick: () => { filter = 'all'; lastSig = ''; renderHome(); } }, t('all')),
+      agents.map((a) => h('button', { class: 'fchip' + (filter === a ? ' on' : ''), onclick: () => { filter = a; lastSig = ''; renderHome(); } }, logo(a, 18), agentName(a)))));
+  }
+  for (const i of list) {
+    const chip = i.waiting ? h('span', { class: 'chip waiting' }, t('stWaiting')) : i.running ? h('span', { class: 'chip working' }, t('stWorking')) : i.live ? h('span', { class: 'chip done' }, t('live')) : null;
+    const rowEl = h(i.key ? 'button' : 'div', { class: 'chatrow', onclick: i.key ? () => openChat(i.key) : null },
+      logo(i.agent, 38),
+      h('div', { class: 'grow' }, h('div', { class: 'name ttl' }, i.title), h('div', { class: 'meta' }, (i.project ? i.project + ' · ' : '') + agentName(i.agent) + ' · ' + since(i.at))),
+      i.unread ? h('i', { class: 'unread' }) : null, chip);
+    const card = h('div', { class: 'card' }, rowEl);
+    if (i.s && i.s.ask) card.append(askEl(i.agent, i.s));
+    else if (!i.key && i.s && i.s.unread && i.s.reply) card.append(replyEl(i.agent, i.s));
+    els.push(card);
+  }
+  if (!list.length) els.push(h('div', { class: 'empty' }, t('noChats')));
+  if (chats && chats.ok && chats.more) els.push(h('button', { class: 'btn', style: 'justify-self:center', onclick: async () => { listLimit += 40; while (busy) await new Promise((r) => setTimeout(r, 50)); await loadChats(); lastSig = ''; renderHome(); } }, t('loadMore')));
+  const waiting = all.filter((i) => i.waiting).length;
+  $('sub').textContent = waiting ? t('stWaiting') + ' ' + waiting : '';
+  $('title').textContent = 'Agent Dock';
+  main.replaceChildren(...els);
+}
 
-const pickOf = (agent) => (picks[agent] = picks[agent] || { model: '', effort: '' });
+// ------------------------------------------------------------------ model and thinking choices
+const optsOf = (agent) => (chats && chats.ok && chats.options[agent]) || null;
+const modelIds = (agent) => { const o = optsOf(agent); return o ? (o.models || []).map((m) => (typeof m === 'string' ? m : m.id)) : []; };
 function effortsFor(agent, model) {
-  const o = chats.options[agent];
-  if (agent === 'claude') return o.efforts;
+  const o = optsOf(agent);
+  if (!o) return [];
+  if (!o.models.length || typeof o.models[0] === 'string') return o.efforts || [];
   const m = o.models.find((x) => x.id === (model || o.default));
   return m ? m.efforts : [...new Set(o.models.flatMap((x) => x.efforts))];
 }
 function sane(agent) { // drop a remembered choice the computer no longer offers
-  const p = pickOf(agent);
-  const o = chats.options[agent];
-  const ids = agent === 'claude' ? o.models : o.models.map((x) => x.id);
-  if (p.model && !ids.includes(p.model)) p.model = '';
+  const p = (picks[agent] = picks[agent] || { model: '', effort: '' });
+  if (p.model && !modelIds(agent).includes(p.model)) p.model = '';
   if (p.effort && !effortsFor(agent, p.model).includes(p.effort)) p.effort = '';
   return p;
 }
 function pickers(agent, rerender) {
   const p = sane(agent);
-  const o = chats.options[agent];
-  const ids = agent === 'claude' ? o.models : o.models.map((x) => x.id);
-  const model = h('select', { 'aria-label': t('model'), onchange: (e) => { p.model = e.target.value; sane(agent); store.set('picks', picks); rerender(); } },
-    h('option', { value: '' }, t('modelDefault')), ids.map((id) => h('option', { value: id, selected: id === p.model }, id)));
-  const effort = h('select', { 'aria-label': t('effort'), onchange: (e) => { p.effort = e.target.value; store.set('picks', picks); } },
-    h('option', { value: '' }, t('effortDefault')), effortsFor(agent, p.model).map((x) => h('option', { value: x, selected: x === p.effort }, x)));
-  return [model, effort];
-}
-const errMsg = (r) => {
-  const j = r.json || {};
-  const key = r.status === 403 && j.error === 'insecure' ? 'insecure' : j.error;
-  return t('chatErr')[key] || t('failed') + (key ? ' · ' + key : '');
-};
-
-async function loadChats() {
-  const r = await api('/api/chats');
-  chats = r.status === 200 && r.json ? r.json : { ok: false, error: r.status === 403 ? 'insecure' : 'offline' };
+  const models = modelIds(agent);
+  const out = [];
+  if (models.length) out.push(h('select', { 'aria-label': t('model'), onchange: (e) => { p.model = e.target.value; sane(agent); store.set('picks', picks); rerender(); } }, h('option', { value: '' }, t('modelDefault')), models.map((id) => h('option', { value: id, selected: id === p.model }, id))));
+  const efforts = effortsFor(agent, p.model);
+  if (efforts.length) out.push(h('select', { 'aria-label': t('effort'), onchange: (e) => { p.effort = e.target.value; store.set('picks', picks); } }, h('option', { value: '' }, t('effortDefault')), efforts.map((x) => h('option', { value: x, selected: x === p.effort }, x))));
+  return out;
 }
 
-function renderChats() {
-  if (view.mode === 'chat') return renderChatView();
-  $('main').classList.remove('inchat');
-  if (!chats) return $('main').replaceChildren(h('div', { class: 'empty' }, t('loading')));
-  if (!chats.ok) return $('main').replaceChildren(h('div', { class: 'empty' }, t('chatErr')[chats.error] || t('failed')));
-  return view.mode === 'new' ? renderNewChat() : renderChatList();
-}
-
-function renderChatList() {
-  const rows = chats.chats.map((c) => h('button', { class: 'card chatrow', onclick: () => openChat(c.key) },
-    h('i', { class: 'dot', style: 'background:' + color(c.agent) }),
-    h('div', { class: 'grow' }, h('div', { class: 'name ttl' }, c.title), h('div', { class: 'meta' }, c.project + ' · ' + since(c.at))),
-    c.running ? h('span', { class: 'chip working' }, t('running')) : c.live ? h('span', { class: 'chip done' }, t('live')) : null));
-  $('main').replaceChildren(
-    h('button', { class: 'btn primary', style: 'justify-self:start', onclick: () => { view = { mode: 'new' }; renderChats(); } }, '+ ' + t('newChat')),
-    ...(rows.length ? rows : [h('div', { class: 'empty' }, t('noChats'))]));
-}
-
-function renderNewChat() {
+// ------------------------------------------------------------------ new chat
+function renderNew() {
+  const main = $('main');
+  main.classList.remove('inchat');
+  $('newbtn').style.display = 'none';
   const folders = chats.folders || [];
+  const agents = (chats.options.agents || []).filter((a) => a.chat !== false);
+  if (!agents.some((a) => a.id === newDraft.agent)) newDraft.agent = agents[0] ? agents[0].id : 'claude';
   if (!newDraft.dir || !folders.some((f) => f.path === newDraft.dir)) newDraft.dir = folders[0] ? folders[0].path : '';
-  const seg = h('div', { class: 'seg' }, ['claude', 'codex'].map((a) => h('button', { class: newDraft.agent === a ? 'on' : '', onclick: () => { newDraft.agent = a; renderNewChat(); } }, a === 'claude' ? 'Claude' : 'Codex')));
+  const grid = h('div', { class: 'agents' }, agents.map((a) => h('button', { class: 'agentbtn' + (newDraft.agent === a.id ? ' on' : ''), onclick: () => { newDraft.agent = a.id; renderNew(); } }, logo(a.id, 40), a.name)));
   const dir = h('select', { 'aria-label': t('folder'), disabled: !folders.length, onchange: (e) => { newDraft.dir = e.target.value; } }, folders.map((f) => h('option', { value: f.path, selected: f.path === newDraft.dir }, f.name)));
   const text = h('textarea', { placeholder: t('promptPh'), rows: '5', maxlength: '8000' });
   text.value = newDraft.text;
   text.addEventListener('input', () => { newDraft.text = text.value; });
   const note = h('div', { class: 'note' }, folders.length ? '' : t('noFolders'));
-  if (newDraft.agent === 'codex' && !chats.full) note.textContent = t('codexRO');
+  const cur = agents.find((a) => a.id === newDraft.agent);
+  if (folders.length && cur && cur.readOnly && !chats.full) note.textContent = t('readOnly');
   const go = h('button', { class: 'btn primary', disabled: !folders.length, onclick: async () => {
     if (!newDraft.text.trim()) return;
     go.disabled = true;
@@ -363,58 +384,75 @@ function renderNewChat() {
     const r = await api('/api/task', { op: 'start', agent: newDraft.agent, dir: newDraft.dir, prompt: newDraft.text, model: p.model, effort: p.effort });
     const j = r.json || {};
     if (r.status === 200 && j.ok) {
-      const agent = newDraft.agent;
       pendingMsg = { text: newDraft.text, at: Date.now() };
+      view = { mode: 'chat', key: j.key || null, task: j.id, agent: newDraft.agent };
       newDraft.text = '';
-      view = { mode: 'chat', key: j.key || null, task: j.id, agent };
       chatData = null; chatLimit = 40; composerText = '';
-      return renderChats();
+      return renderChat();
     }
     note.className = 'note bad';
     note.textContent = errMsg(r);
     go.disabled = false;
   } }, t('start'));
-  $('main').replaceChildren(
-    h('div', { class: 'toolbar' }, h('button', { class: 'btn', onclick: () => { view = { mode: 'list' }; renderChats(); } }, '‹ ' + t('back')), seg),
+  $('title').textContent = t('newTitle');
+  $('sub').textContent = '';
+  main.replaceChildren(
+    h('button', { class: 'btn', style: 'justify-self:start', onclick: () => (history.length > 1 ? history.back() : goHome()) }, '‹ ' + t('back')),
     h('div', { class: 'card', style: 'padding:12px 14px' },
-      h('div', { class: 'name' }, t('newChat')),
+      h('div', { class: 'meta' }, t('pickAgent')), grid,
       h('div', { class: 'row' }, dir),
-      h('div', { class: 'row' }, ...pickers(newDraft.agent, renderNewChat)),
+      h('div', { class: 'row' }, ...pickers(newDraft.agent, renderNew)),
       text, h('div', { class: 'row' }, go), note));
 }
+function goHome() {
+  view = { mode: 'home' };
+  chatData = null;
+  lastSig = '';
+  poll();
+}
+window.addEventListener('popstate', () => { if (view.mode !== 'home') goHome(); });
+function push(mode) { try { history.pushState({ m: mode }, ''); } catch {} }
 
+// ------------------------------------------------------------------ one conversation
 async function openChat(key) {
+  const m = sessionOf(key);
+  if (m && m.s.unread && m.s.reply) api('/api/dismiss', { agent: m.r.id, id: m.s.id }); // looking at it counts as read
+  push('chat');
   view = { mode: 'chat', key };
   chatData = null; chatLimit = 40; composerText = ''; pendingMsg = null;
-  renderChats();
+  renderChat();
   await tickChat();
 }
-
-// the open conversation: header, transcript and composer are built once; only the transcript is refreshed
-function renderChatView() {
+function renderChat() {
   const main = $('main');
   const agent = (chatData && chatData.chat.agent) || view.agent || 'claude';
-  const title = h('div', { class: 'name ttl', id: 'ch-title' }, chatData ? chatData.chat.title : t('loading'));
-  const sub = h('div', { class: 'meta', id: 'ch-sub' }, chatData ? chatData.chat.project : '');
-  const head = h('div', { class: 'chathead' },
-    h('button', { class: 'btn', onclick: () => { view = { mode: 'list' }; chatData = null; loadChats().then(renderChats); } }, '‹'),
-    h('i', { class: 'dot', style: 'background:' + color(agent) }), h('div', { class: 'grow' }, title, sub));
+  $('newbtn').style.display = 'none';
+  $('title').textContent = 'Agent Dock';
+  $('sub').textContent = '';
+  const back = h('button', { class: 'btn', onclick: () => history.length > 1 ? history.back() : goHome() }, '‹ ' + t('back'));
+  const head = h('div', { class: 'chathead' }, back, logo(agent, 30), h('div', { class: 'grow' }, h('div', { class: 'name ttl', id: 'ch-title' }, chatData ? chatData.chat.title : t('loading')), h('div', { class: 'meta', id: 'ch-sub' }, chatData ? chatData.chat.project + ' · ' + agentName(agent) : '')));
   const msgs = h('div', { class: 'msgs', id: 'msgs' });
   const text = h('textarea', { id: 'ch-text', placeholder: t('typeMsg'), rows: '2', maxlength: '8000' });
   text.value = composerText;
   text.addEventListener('input', () => { composerText = text.value; });
-  const note = h('div', { class: 'note', id: 'ch-note' });
   const go = h('button', { class: 'btn primary', id: 'ch-go', onclick: onSendOrStop }, t('send'));
-  const pk = chats && chats.ok ? pickers(agent, renderChatView) : [];
+  const pk = chats && chats.ok ? pickers(agent, renderChat) : [];
   main.classList.add('inchat');
-  main.replaceChildren(head, msgs, h('div', { class: 'composer' }, note, text, h('div', { class: 'row' }, ...pk, go)));
+  main.replaceChildren(head, msgs, h('div', { class: 'composer' }, h('div', { id: 'ch-ask' }), h('div', { class: 'note', id: 'ch-note', style: 'margin:0 0 4px' }), text, h('div', { class: 'row' }, ...pk, go)));
   paintChat(true);
 }
-
+function syncAsk() {
+  const slot = $('ch-ask');
+  if (!slot || !view.key) return;
+  const m = sessionOf(view.key);
+  const aid = m && m.s.ask ? m.s.ask.id : '';
+  if ((slot.firstChild ? slot.firstChild.dataset.aid : '') === aid) return;
+  slot.replaceChildren(...(aid ? [askEl(m.r.id, m.s)] : []));
+}
 function paintChat(forceBottom) {
   const msgs = $('msgs');
   if (!msgs) return;
-  const near = forceBottom || msgs.scrollHeight - (window.scrollY + window.innerHeight) < 220;
+  const near = forceBottom || document.body.scrollHeight - (window.scrollY + window.innerHeight) < 260;
   const d = chatData;
   const list = d ? d.messages.slice() : [];
   const lastUser = [...list].reverse().find((m) => m.role === 'user');
@@ -422,12 +460,13 @@ function paintChat(forceBottom) {
   const els = [];
   if (d && d.more) els.push(h('button', { class: 'btn', style: 'justify-self:center', onclick: () => { chatLimit += 60; tickChat(); } }, t('older')));
   for (const m of list) els.push(h('div', { class: 'msg ' + m.role }, m.text));
-  if (d && d.running) els.push(h('div', { class: 'msg working' }, t('working')));
+  if (d && d.running) els.push(h('div', { class: 'msg working' }, t('typing')));
   if (!list.length && d) els.push(h('div', { class: 'empty' }, t('noMessages')));
   msgs.replaceChildren(...els);
+  syncAsk();
   if (d) {
     $('ch-title').textContent = d.chat.title;
-    $('ch-sub').textContent = d.chat.project + ' · ' + (d.chat.agent === 'claude' ? 'Claude' : 'Codex');
+    $('ch-sub').textContent = d.chat.project + ' · ' + agentName(d.chat.agent);
     const note = $('ch-note');
     const go = $('ch-go');
     go.textContent = d.running ? t('stop') : t('send');
@@ -441,15 +480,19 @@ function paintChat(forceBottom) {
     note.textContent = n;
     note.className = 'note' + (bad ? ' bad' : '');
     go.disabled = !d.running && (!state || !state.secure);
+    if (d.chat.canSend === false) { // history only (the agent cannot be driven from the phone)
+      note.textContent = t('historyOnly');
+      note.className = 'note';
+      go.disabled = true;
+      $('ch-text').disabled = true;
+    }
   }
   if (near) window.scrollTo(0, document.body.scrollHeight);
 }
-
 async function onSendOrStop() {
   const d = chatData;
   if (d && d.running) {
-    const tid = d.taskId;
-    if (tid) await api('/api/task', { op: 'stop', id: tid });
+    if (d.taskId) await api('/api/task', { op: 'stop', id: d.taskId });
     return tickChat();
   }
   const text = composerText.trim();
@@ -463,8 +506,8 @@ async function onSendOrStop() {
     composerText = '';
     $('ch-text').value = '';
     pendingMsg = { text, at: Date.now() };
-    if (j.key && j.key !== view.key) { view = { mode: 'chat', key: j.key }; chatData = null; chatLimit = 40; renderChatView(); }
-    else if (j.fork && !j.key) { view = { mode: 'chat', key: null, task: j.id, agent: d.chat.agent }; chatData = null; chatLimit = 40; renderChatView(); } // a Codex copy gets its id a moment later
+    if (j.key && j.key !== view.key) { view = { mode: 'chat', key: j.key }; chatData = null; chatLimit = 40; renderChat(); }
+    else if (j.fork && !j.key) { view = { mode: 'chat', key: null, task: j.id, agent: d.chat.agent }; chatData = null; chatLimit = 40; renderChat(); } // a copy whose id comes a moment later
     await tickChat();
     return;
   }
@@ -473,47 +516,130 @@ async function onSendOrStop() {
   note.textContent = errMsg(r);
   go.disabled = false;
 }
-
 let chatTicking = false;
 async function tickChat() {
-  if (chatTicking) return;
+  if (chatTicking || view.mode !== 'chat') return;
   chatTicking = true;
   try {
-    if (!chats) await loadChats();
-    if (view.mode === 'chat' && !view.key && view.task) { // a new Codex chat gets its id a moment after it starts
+    if (!view.key && view.task) { // a new Codex-style chat gets its id a moment after it starts
       await loadChats();
       const k = chats.ok && chats.tasks.find((x) => x.id === view.task);
       if (k && k.session) view.key = k.agent + ':' + k.session;
-      else if (!k || Date.now() - (view.since = view.since || Date.now()) > 30000) { view = { mode: 'list' }; return renderChats(); } // never wait forever for an id
-      else if (k && k.status !== 'running' && k.status !== 'done') { view = { mode: 'list' }; return renderChats(); }
+      else if (!k || Date.now() - (view.since = view.since || Date.now()) > 30000 || (k.status !== 'running' && k.status !== 'done')) { goHome(); return; }
     }
-    if (view.mode === 'chat' && view.key) {
+    if (view.key) {
       const r = await api('/api/chat?key=' + encodeURIComponent(view.key) + '&limit=' + chatLimit);
       if (r.status === 200 && r.json && r.json.ok) {
         const first = !chatData;
         chatData = r.json;
         if (!chatData.running && pendingMsg && Date.now() - pendingMsg.at > 8000) pendingMsg = null;
-        if (first) renderChatView(); else paintChat(false);
-      } else if (r.json && r.json.error === 'not found' && pendingMsg && Date.now() - pendingMsg.at < 15000) {
-        paintChat(false); // the transcript file of a brand new chat is a moment away
+        if (first) renderChat(); else paintChat(false);
+      } else if (r.json && r.json.error === 'not found') {
+        if (pendingMsg && Date.now() - pendingMsg.at < 15000) paintChat(false); // the transcript of a brand new chat is a moment away
+        else { goHome(); return; } // nothing to open for this one
       }
-    } else if (view.mode === 'list') {
-      const before = JSON.stringify(chats);
-      await loadChats();
-      if (JSON.stringify(chats) !== before) renderChats(); // not on every tick: a tap must not land on a list that is being rebuilt
     }
   } catch {} finally {
     chatTicking = false;
   }
 }
 
+// ------------------------------------------------------------------ notifications (web push)
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+let pushSubscribed = false;
+let toastTimer = null;
+function toast(text) {
+  const el = $('toast');
+  el.textContent = text;
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+const keyToBytes = (s) => {
+  const b = atob((s + '='.repeat((4 - (s.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(b, (c) => c.charCodeAt(0));
+};
+function pushCapable() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+async function updateBell() {
+  const bell = $('bell');
+  if (!('serviceWorker' in navigator)) { bell.style.display = 'none'; return; }
+  bell.style.display = '';
+  pushSubscribed = false;
+  if (pushCapable() && Notification.permission !== 'denied') {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && (await reg.pushManager.getSubscription());
+      const r = sub ? await api('/api/push') : null;
+      pushSubscribed = !!(sub && r && r.json && r.json.subscribed);
+    } catch {}
+  }
+  bell.textContent = pushSubscribed ? '🔔' : '🔕';
+  bell.setAttribute('aria-label', pushSubscribed ? t('pushOffMsg') : t('pushOnMsg'));
+}
+async function togglePush() {
+  if (!('serviceWorker' in navigator)) return toast(t('pushUnsupported'));
+  if (!pushCapable()) return toast(isIOS && !isStandalone() ? t('pushNeedsHome') : t('pushUnsupported'));
+  if (pushSubscribed) {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && (await reg.pushManager.getSubscription());
+      if (sub) await sub.unsubscribe();
+    } catch {}
+    await api('/api/push', { op: 'unsubscribe' });
+    toast(t('pushOffDone'));
+    return updateBell();
+  }
+  let perm = Notification.permission;
+  if (perm === 'default') perm = await Notification.requestPermission(); // the first await: it must come straight from the tap
+  if (perm !== 'granted') return toast(t('pushDenied'));
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+    const k = await api('/api/push');
+    if (!k.json || !k.json.key) return toast(t('pushFailed'));
+    const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyToBytes(k.json.key) }));
+    const j = sub.toJSON();
+    const r = await api('/api/push', { op: 'subscribe', subscription: { endpoint: j.endpoint, keys: j.keys } });
+    if (r.status === 200 && r.json && r.json.ok) toast(t('pushOnDone'));
+    else toast(r.status === 403 ? t('insecure2') : t('pushFailed'));
+  } catch {
+    toast(t('pushFailed'));
+  }
+  updateBell();
+}
+// a notification opens its conversation: from the address (#open=agent:id) or from the service worker when the page is already open
+const OPEN_KEY = /^(claude|codex|opencode|grok):[A-Za-z0-9][A-Za-z0-9_-]{6,80}$/;
+function openFromHash() {
+  const m = /(?:^|[#&])open=([^&]+)/.exec(location.hash || '');
+  if (!m) return;
+  let key = '';
+  try { key = decodeURIComponent(m[1]); } catch {}
+  history.replaceState(null, '', location.pathname);
+  if (OPEN_KEY.test(key) && chatsOn()) openChat(key);
+}
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const k = e.data && typeof e.data.open === 'string' ? e.data.open : '';
+    if (OPEN_KEY.test(k) && chatsOn()) openChat(k);
+  });
+}
+$('bell').addEventListener('click', togglePush);
+
 // ------------------------------------------------------------------ loop
 function showUnpaired() {
   $('main').replaceChildren(h('div', { class: 'center' }, h('h2', null, t('unpaired')), t('unpairedText')));
   $('sub').textContent = '';
+  $('newbtn').style.display = 'none';
 }
 function showOffline() {
   $('main').replaceChildren(h('div', { class: 'center' }, h('h2', null, t('offline')), h('button', { class: 'btn', style: 'margin-top:14px', onclick: poll }, t('retry'))));
+}
+async function loadChats() {
+  const r = await api('/api/chats?limit=' + listLimit);
+  chats = r.status === 200 && r.json ? r.json : { ok: false, error: r.status === 403 ? 'insecure' : 'offline' };
 }
 async function poll() {
   if (busy) return;
@@ -523,32 +649,38 @@ async function poll() {
     if (r.status === 401) return showUnpaired();
     if (r.status !== 200 || !r.json) return showOffline();
     state = r.json;
-    $('tab-chats').style.display = state.features && state.features.tasks ? '' : 'none';
-    if (tab === 'chats' && !(state.features && state.features.tasks)) tab = 'agents';
-    if (tab === 'agents') renderAgents();
+    if (chatsOn() && view.mode !== 'chat') await loadChats();
+    else if (!chatsOn()) chats = null;
+    if (view.mode === 'home') {
+      // what is drawn, with times to the minute: a live session's second-by-second changes must not rebuild the list under a tap
+      const sig = JSON.stringify([items().map((i) => [i.key, i.title, i.agent, i.waiting, i.running, i.live, i.unread, Math.floor(i.at / 60000), i.s && i.s.ask && i.s.ask.id, i.s && i.s.reply && i.s.reply.id]), chats && chats.more, filter, Math.floor(Date.now() / 60000)]);
+      const typing = document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && $('main').contains(document.activeElement);
+      if (sig !== lastSig && !typing) { lastSig = sig; renderHome(); }
+    } else if (view.mode === 'chat') syncAsk();
+    else if (view.mode === 'new' && chats && chats.ok && !$('main').querySelector('textarea')) renderNew();
   } catch {
     if (!state) showOffline();
   } finally {
     busy = false;
   }
 }
-for (const b of document.querySelectorAll('nav button')) {
-  b.addEventListener('click', () => {
-    tab = b.dataset.tab;
-    document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
-    $('main').classList.remove('inchat');
-    if (tab === 'agents') renderAgents(); else if (tab === 'chats') { renderChats(); tickChat(); } 
-  });
-}
-$('t-agents').textContent = t('agents');
-$('t-chats').textContent = t('chats');
+$('newbtn').addEventListener('click', async () => {
+  if (!chats || !chats.ok) await loadChats();
+  if (!chats || !chats.ok) return;
+  push('new');
+  view = { mode: 'new' };
+  renderNew();
+});
 (async () => {
   const failed = await pairFromUrl();
   if (failed) return;
   await poll();
-  setInterval(() => { if (!document.hidden) poll(); }, 3000);
-  setInterval(() => { if (!document.hidden && tab === 'chats') tickChat(); }, 2500);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  updateBell();
+  openFromHash();
+  setInterval(() => { if (!document.hidden && view.mode !== 'new') poll(); }, 3000);
+  setInterval(() => { if (!document.hidden) tickChat(); }, 2500);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { poll(); updateBell(); } });
 })();
 </script>
 </body>

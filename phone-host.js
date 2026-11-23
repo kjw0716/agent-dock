@@ -2,12 +2,14 @@
 // Glues the phone pieces to the dock: the HTTP server (phone.js), Tailscale (tailscale.js) and push (bark.js).
 // Nothing runs unless the user turns "Phone access" on in Settings.
 const fs = require('fs');
+const { execFile } = require('child_process');
 const path = require('path');
 const { PhoneServer } = require('./phone');
 const { Notifier, send: barkSend } = require('./bark');
+const { PushSender, cleanSubscription } = require('./push');
 const tailscale = require('./tailscale');
 const { TaskRunner } = require('./tasks');
-const { ChatIndex, readMessages, options: chatOptions, choose: chooseOpts } = require('./chats');
+const { ChatIndex, options: chatOptions, choose: chooseOpts } = require('./chats');
 
 const DEFAULT_PORT = 47821;
 const MAX_READ = 400;
@@ -30,6 +32,7 @@ class PhoneHost {
     this.notifier = new Notifier({ push: (m) => this.push(m) });
     this.run = deps.run || null;
     this.index = deps.chatIndex || new ChatIndex();
+    this.pushSender = deps.pushSender || new PushSender({ dataDir: deps.dataDir });
     this.taskRunner = new TaskRunner({
       mode: () => (this.cfg().tasksFull ? 'full' : 'edits'),
       dirs: () => this.cfg().dirs || [],
@@ -110,18 +113,20 @@ class PhoneHost {
       assets: this.assets(),
       handlers: {
         state: () => ({ rows: this.d.rows() }),
-        chats: () => this.chatList(),
+        chats: (q) => this.chatList(q),
         chat: (q) => this.chatRead(q),
         features: () => this.features(),
         answer: (b, dev) => (this.features().answer ? this.d.answer(b) : { ok: false, error: 'disabled' }),
         dismiss: (b) => (this.features().answer ? this.d.dismiss(b) : { ok: false, error: 'disabled' }),
         task: (b) => this.task(b),
+        push: (b, device) => this.pushOp(b, device),
+        pushState: (device) => this.pushState(device),
       },
     });
     try {
       await server.start();
       this.server = server;
-      setTimeout(() => { try { if (this.cfg().tasks) this.index.list(); } catch {} }, 50); // warm the conversation index before the first phone request
+      setTimeout(() => { try { if (this.cfg().tasks) { this.index.list(); this.refreshOpenCodeModels(); } } catch {} }, 50); // warm the conversation index before the first phone request
       this.error = '';
     } catch (e) {
       this.error = e && e.code === 'EADDRINUSE' ? 'port in use' : 'could not start';
@@ -129,7 +134,24 @@ class PhoneHost {
   }
 
   opts() {
-    return this.d.chatOptions ? this.d.chatOptions() : chatOptions();
+    if (this.d.chatOptions) return this.d.chatOptions();
+    const oc = this.taskRunner.opencode();
+    return chatOptions({ opencode: oc ? { models: this.ocModels || [] } : null });
+  }
+
+  /** OpenCode's model list comes from its own CLI; asked once, in the background. */
+  refreshOpenCodeModels() {
+    const exe = this.taskRunner.opencode();
+    if (!exe || this.ocAsked) return;
+    this.ocAsked = true;
+    execFile(exe, ['models'], { timeout: 20000, windowsHide: true, maxBuffer: 1024 * 1024 }, (err, out) => {
+      if (!err) this.ocModels = String(out).split(/\r?\n/).map((l) => l.trim()).filter((l) => /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/.test(l));
+    });
+  }
+
+  /** Which agents a message can be sent to from the phone. */
+  canSend(agent) {
+    return agent === 'claude' || agent === 'codex' || (agent === 'opencode' && !!this.taskRunner.opencode());
   }
 
   /** Running (or last) turn of a conversation, by its id. */
@@ -147,11 +169,12 @@ class PhoneHost {
     return !running && this.index.live(e, { ownEnd: ends.length ? Math.max(...ends) : 0 });
   }
 
-  chatList() {
+  chatList(q) {
     if (!this.cfg().tasks) return { ok: false, error: 'disabled' };
-    const chats = this.index.list().map((c) => ({ key: c.key, agent: c.agent, title: c.title, project: c.project, at: c.at, running: this.turnOf(c.id).running, live: this.liveOf(c) }));
+    const limit = Math.min(400, Math.max(20, Number(q && q.limit) || 40));
+    const chats = this.index.list(limit).map((c) => ({ key: c.key, agent: c.agent, title: c.title, project: c.project, at: c.at, running: this.turnOf(c.id).running, live: this.liveOf(c) }));
     const tasks = this.taskRunner.list().map((t) => ({ id: t.id, agent: t.agent, session: t.session, status: t.status, error: t.error, fork: t.fork }));
-    return { ok: true, chats, tasks, options: this.opts(), folders: this.taskRunner.folders(), full: !!this.cfg().tasksFull };
+    return { ok: true, chats, more: !!this.index.more, tasks, options: this.opts(), folders: this.taskRunner.folders(), full: !!this.cfg().tasksFull };
   }
 
   /** The phone polls an open conversation: do not read the file again while it has not changed. */
@@ -159,13 +182,13 @@ class PhoneHost {
     let sig = '';
     try {
       const st = fs.statSync(e.file);
-      sig = `${st.size}:${st.mtimeMs}`;
+      sig = `${st.size}:${st.mtimeMs}:${e.at}`;
     } catch {}
     this.readMemo = this.readMemo || new Map();
-    const k = `${e.file}|${limit}`;
+    const k = `${e.key}|${limit}`; // not the file: every OpenCode chat shares one database
     const hit = this.readMemo.get(k);
     if (hit && hit.sig === sig) return hit.r;
-    const r = readMessages(e.file, e.agent, { limit });
+    const r = this.index.read(e, limit);
     r.more = r.more && limit < MAX_READ;
     this.readMemo.set(k, { sig, r });
     if (this.readMemo.size > 12) this.readMemo.delete(this.readMemo.keys().next().value);
@@ -178,24 +201,26 @@ class PhoneHost {
     if (!e) return { ok: false, error: 'not found' };
     const limit = Math.min(MAX_READ, Math.max(10, Number(q.limit) || 40));
     const { messages, more } = this.readCached(e, limit);
-    return { ok: true, chat: { key: e.key, agent: e.agent, title: e.title, project: e.project, live: this.liveOf(e) }, messages, more, ...this.turnOf(e.id) };
+    return { ok: true, chat: { key: e.key, agent: e.agent, title: e.title, project: e.project, live: this.liveOf(e), canSend: this.canSend(e.agent) }, messages, more, ...this.turnOf(e.id) };
   }
 
   task(b) {
     if (!this.cfg().tasks) return { ok: false, error: 'disabled' };
     if (!b || typeof b !== 'object') return { ok: false, error: 'bad request' };
     if (b.op === 'stop') return { ok: this.taskRunner.stop(String(b.id)) };
+    if (!this.canSend(b.agent)) return { ok: false, error: 'agent' };
     const pick = chooseOpts(this.opts(), b.agent, b.model, b.effort);
     if (!pick) return { ok: false, error: 'model' };
     const base = { prompt: b.prompt, model: pick.model, effort: pick.effort };
     if (b.op === 'send') {
       const e = this.index.find(b.key);
       if (!e) return { ok: false, error: 'not found' };
+      if (!this.canSend(e.agent)) return { ok: false, error: 'agent' };
       // A copy whenever something else may hold the conversation: it is open on this computer, or (Codex, which shows no process) the
       // dock did not start it itself. A conversation the dock started keeps being continued in place.
       const live = this.liveOf(e);
       const owned = this.taskRunner.list().some((t) => t.session === e.id);
-      const fork = live || (e.agent === 'codex' && !owned);
+      const fork = live || (e.agent !== 'claude' && !owned);
       const p2 = chooseOpts(this.opts(), e.agent, b.model, b.effort);
       if (!p2) return { ok: false, error: 'model' };
       const r = this.taskRunner.resume({ agent: e.agent, session: e.id, cwd: e.cwd, prompt: b.prompt, model: p2.model, effort: p2.effort, fork });
@@ -220,6 +245,8 @@ class PhoneHost {
       '/': { file: path.join(dir, 'app.html'), type: 'text/html; charset=utf-8' },
       '/manifest.webmanifest': { file: path.join(dir, 'manifest.webmanifest'), type: 'application/manifest+json' },
       '/icon.png': { file: this.d.iconFile, type: 'image/png' },
+      '/mascots.js': { file: path.join(__dirname, 'mascots.js'), type: 'text/javascript; charset=utf-8' },
+      '/sw.js': { file: path.join(dir, 'sw.js'), type: 'text/javascript; charset=utf-8' },
     };
   }
 
@@ -306,14 +333,42 @@ class PhoneHost {
     return this.server.revoke(String(id));
   }
 
+  /** One notification to every channel that is set up: the Bark address, and every phone subscribed to web push. */
   async push(message) {
+    const targets = this.server ? this.server.pushTargets() : [];
     const addr = this.barkAddress();
-    if (!addr) return { ok: false, error: 'address' };
+    if (!addr && !targets.length) return { ok: false, error: 'address' };
     await this.refreshTailscale(false);
-    const url = this.ts.host && this.ts.serving ? `https://${this.ts.host}/` : undefined;
-    const r = await barkSend(addr, { ...message, url });
-    this.lastPush = { ok: r.ok, error: r.error || (r.ok ? '' : String(r.status || 'failed')), at: Date.now() };
-    return r;
+    const base = this.ts.host && this.ts.serving ? `https://${this.ts.host}/` : undefined;
+    const url = base && message.open ? `${base}#open=${encodeURIComponent(message.open)}` : base;
+    let bark = null;
+    if (addr) bark = await barkSend(addr, { title: message.title, body: message.body, url });
+    let web = null;
+    if (targets.length) {
+      web = await this.pushSender.send(targets, message);
+      if (web.gone.length && this.server) this.server.dropPush(web.gone); // the phone removed the subscription
+    }
+    const ok = !!((bark && bark.ok) || (web && web.sent > 0));
+    this.lastPush = { ok, error: ok ? '' : (bark && (bark.error || String(bark.status || ''))) || (web ? 'web push failed' : 'failed'), at: Date.now(), web: web ? { sent: web.sent, failed: web.failed } : undefined };
+    return { ok, bark, web };
+  }
+
+  /** A phone subscribing to / leaving web push (its own device record). */
+  pushOp(b, device) {
+    if (!this.server || !b || typeof b !== 'object') return { ok: false, error: 'off' };
+    if (b.op === 'unsubscribe') return { ok: this.server.setPush(device.id, null) };
+    if (b.op !== 'subscribe') return { ok: false, error: 'op' };
+    const sub = cleanSubscription(b.subscription);
+    if (!sub) return { ok: false, error: 'subscription' };
+    return { ok: this.server.setPush(device.id, sub) };
+  }
+
+  pushState(device) {
+    let key = '';
+    try {
+      key = this.pushSender.publicKey();
+    } catch {}
+    return { key, subscribed: !!(device && device.push) };
   }
 
   testPush() {
@@ -322,7 +377,7 @@ class PhoneHost {
 
   /** Call after each scan with the rows the dock shows. */
   observe(rows, lang) {
-    if (this.cfg().enabled && this.barkAddress()) this.notifier.observe(rows, lang);
+    if (this.cfg().enabled && (this.barkAddress() || (this.server && this.server.pushTargets().length))) this.notifier.observe(rows, lang);
   }
 
   async info() {

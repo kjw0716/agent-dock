@@ -15,7 +15,7 @@ const os = require('os');
 const MAX_MSG = 6000;
 const HEAD_BYTES = 1024 * 1024;
 const LIST_TTL = 4000;
-const KEY = /^(claude|codex):([A-Za-z0-9][A-Za-z0-9_-]{6,80})$/;
+const KEY = /^(claude|codex|opencode|grok):([A-Za-z0-9][A-Za-z0-9_-]{6,80})$/;
 
 const RECENT_MS = 3 * 60 * 1000;
 
@@ -31,6 +31,7 @@ function pidAlive(pid) {
 
 const CLAUDE_MODELS =['fable', 'opus', 'sonnet', 'haiku'];
 const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const OPENCODE_EFFORTS = ['medium', 'high'];
 
 const clip = (s, n = MAX_MSG) => {
   s = String(s || '').replace(/\r\n/g, '\n').trim();
@@ -73,7 +74,7 @@ function toolLine(name, input) {
   }
   let hint = '';
   if (o && typeof o === 'object') {
-    const v = o.description || o.command || o.cmd || o.file_path || o.path || o.pattern || o.query || o.url || o.prompt || '';
+    const v = o.description || o.command || o.cmd || o.file_path || o.filePath || o.target_file || o.path || o.pattern || o.query || o.url || o.prompt || '';
     hint = Array.isArray(v) ? v.join(' ') : String(v);
   }
   return clip(`${name}${hint ? ' · ' + hint.replace(/\s+/g, ' ') : ''}`, 160);
@@ -119,7 +120,7 @@ function codexMessages(objs) {
   return out;
 }
 
-const extractor = (agent) => (agent === 'claude' ? claudeMessages : codexMessages);
+const extractor = (agent) => (agent === 'claude' ? claudeMessages : agent === 'grok' ? grokMessages : codexMessages);
 
 /** A run of tool calls becomes one row (the first few lines and a count): a long agent turn would otherwise fill the page. */
 function collapseTools(msgs) {
@@ -174,8 +175,9 @@ function firstText(file, agent) {
 }
 
 class ChatIndex {
-  constructor({ home = os.homedir(), now = () => Date.now(), limit = 40 } = {}) {
+  constructor({ home = os.homedir(), now = () => Date.now(), limit = 40, openDb = openSqlite } = {}) {
     this.home = home;
+    this.openDb = openDb;
     this.now = now;
     this.limit = limit;
     this.head = new Map(); // file -> { cwd, title, id }
@@ -268,21 +270,45 @@ class ChatIndex {
   }
 
   /** [{ key, agent, id, file, cwd, title, project, at }], newest first. */
-  list() {
-    if (this.cache && this.now() - this.at < LIST_TTL) return this.cache;
+  list(limit = this.limit) {
+    if (this.cache && this.cacheLimit === limit && this.now() - this.at < LIST_TTL) return this.cache;
     const all = [...this.claudeFiles(), ...this.codexFiles()].sort((a, b) => b.mtime - a.mtime);
     const out = [];
+    let more = false;
     for (const e of all) {
-      if (out.length >= this.limit) break;
+      if (out.length >= limit) {
+        more = true;
+        break;
+      }
       const h = this.info(e);
       if (h.skip || !h.cwd) continue;
       const id = h.id || e.id;
       if (!KEY.test(`${e.agent}:${id}`)) continue;
       out.push({ key: `${e.agent}:${id}`, agent: e.agent, id, file: e.file, cwd: h.cwd, title: h.title || path.basename(h.cwd), project: path.basename(h.cwd) || h.cwd, at: e.mtime });
     }
+    // OpenCode and Grok bring their own list (already ordered); merge by time and cut to the page size
+    const extra = [];
+    for (const o of openCodeList(openCodeDb(this.home), this.openDb, limit + 1)) {
+      if (o.cwd) extra.push({ key: `opencode:${o.id}`, agent: 'opencode', id: o.id, file: openCodeDb(this.home), cwd: o.cwd, title: o.title || path.basename(o.cwd), project: path.basename(o.cwd) || o.cwd, at: o.at });
+    }
+    for (const g of grokList(this.home, limit + 1)) {
+      if (g.cwd) extra.push({ key: `grok:${g.id}`, agent: 'grok', id: g.id, file: g.file, cwd: g.cwd, title: g.title || path.basename(g.cwd), project: path.basename(g.cwd) || g.cwd, at: g.at });
+    }
+    const merged = [...out, ...extra.filter((e) => KEY.test(e.key))].sort((a, b) => b.at - a.at);
+    if (merged.length > limit) more = true;
+    out.length = 0;
+    out.push(...merged.slice(0, limit));
     this.cache = out;
+    this.cacheLimit = limit;
+    this.more = more;
     this.at = this.now();
     return out;
+  }
+
+  /** The last `limit` messages of a conversation: { messages, more }. */
+  read(e, limit) {
+    if (e.agent === 'opencode') return openCodeRead(e.file, this.openDb, e.id, limit);
+    return readMessages(e.file, e.agent, { limit });
   }
 
   /**
@@ -291,9 +317,12 @@ class ChatIndex {
    */
   live(e, { alive = pidAlive, recent = RECENT_MS, ownEnd = 0 } = {}) {
     let touched = 0;
-    try {
-      touched = fs.statSync(e.file).mtimeMs;
-    } catch {}
+    if (e.agent === 'opencode') touched = e.at; // the database file is shared by every chat: the chat's own time
+    else {
+      try {
+        touched = fs.statSync(e.file).mtimeMs;
+      } catch {}
+    }
     // `ownEnd`: when the dock's own last turn here finished; a file that has not changed since then was written by the dock itself
     if (this.now() - touched < recent && !(ownEnd && touched <= ownEnd + 5000)) return true;
     if (e.agent !== 'claude') return false;
@@ -323,17 +352,21 @@ class ChatIndex {
   /** The entry for a phone-supplied key, or null. The key is only compared with what the index found. */
   find(key) {
     if (typeof key !== 'string' || !KEY.test(key)) return null;
-    let hit = this.list().find((c) => c.key === key);
-    if (!hit) {
-      this.cache = null; // a conversation started a moment ago must be found
-      hit = this.list().find((c) => c.key === key) || this.findDeep(key);
-    }
-    return hit;
+    // the page the phone is looking at (whatever its size) first; anything else is looked up by id without touching that page
+    return this.list(this.cacheLimit || this.limit).find((c) => c.key === key) || this.findDeep(key);
   }
 
   // A session older than the newest `limit` ones is still resolvable, by id, through the same scan.
   findDeep(key) {
     const [agent, id] = key.split(':');
+    if (agent === 'opencode') {
+      const o = openCodeGet(openCodeDb(this.home), this.openDb, id);
+      return o && o.cwd ? { key, agent, id: o.id, file: openCodeDb(this.home), cwd: o.cwd, title: o.title || path.basename(o.cwd), project: path.basename(o.cwd), at: o.at } : null;
+    }
+    if (agent === 'grok') {
+      const g = grokGet(this.home, id);
+      return g ? { key, agent, id: g.id, file: g.file, cwd: g.cwd, title: g.title || path.basename(g.cwd), project: path.basename(g.cwd), at: g.at } : null;
+    }
     const all = (agent === 'claude' ? this.claudeFiles() : this.codexFiles()).filter((f) => f.id === id); // an exact id, never a suffix
     for (const e of all) {
       const h = this.info(e);
@@ -342,6 +375,175 @@ class ChatIndex {
     }
     return null;
   }
+}
+
+// ----------------------------------------------------------------- OpenCode
+// One SQLite database (opened read-only): session_v2 lists the chats, session_message holds the messages in order.
+function openCodeDb(home) {
+  const base = process.env.XDG_DATA_HOME || path.join(home, '.local', 'share');
+  return path.join(base, 'opencode', 'opencode.db');
+}
+
+function openSqlite(file) {
+  let Driver;
+  try {
+    Driver = require('better-sqlite3'); // optional, built for Electron (scripts/electron-sqlite.js)
+  } catch {
+    return null;
+  }
+  try {
+    return new Driver(file, { readonly: true, fileMustExist: true, timeout: 2000 });
+  } catch {
+    return null;
+  }
+}
+
+function openCodeMessages(rows) {
+  const out = [];
+  for (const r of rows) {
+    let d;
+    try {
+      d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    } catch {
+      continue;
+    }
+    if (!d) continue;
+    const at = Number(d.time && d.time.created) || Number(r.time_created) || 0;
+    if (r.type === 'user') {
+      const t = String(d.text || '');
+      if (t.trim() && !noise(t)) out.push({ role: 'user', text: clip(t), at });
+    } else if (r.type === 'assistant' && Array.isArray(d.content)) {
+      for (const b of d.content) {
+        if (!b) continue;
+        if (b.type === 'text' && String(b.text || '').trim()) out.push({ role: 'assistant', text: clip(b.text), at });
+        else if (b.type === 'tool') out.push({ role: 'tool', text: toolLine(b.name || 'tool', b.state && b.state.input), at });
+      }
+    }
+  }
+  return out;
+}
+
+/** The newest chats (top-level, not archived): [{ id, cwd, title, at }]. */
+function openCodeList(dbFile, openDb, limit) {
+  const db = openDb(dbFile);
+  if (!db) return [];
+  try {
+    return db
+      .prepare('SELECT id, directory, title, time_updated FROM session_v2 WHERE parent_id IS NULL AND time_archived IS NULL ORDER BY time_updated DESC LIMIT ?')
+      .all(limit)
+      .map((r) => ({ id: String(r.id), cwd: String(r.directory || '').replace(/\//g, path.sep), title: String(r.title || ''), at: Number(r.time_updated) || 0 }));
+  } catch {
+    return [];
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
+function openCodeGet(dbFile, openDb, id) {
+  const db = openDb(dbFile);
+  if (!db) return null;
+  try {
+    const r = db.prepare('SELECT id, directory, title, time_updated FROM session_v2 WHERE id = ? AND parent_id IS NULL').get(id);
+    return r ? { id: String(r.id), cwd: String(r.directory || '').replace(/\//g, path.sep), title: String(r.title || ''), at: Number(r.time_updated) || 0 } : null;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
+function openCodeRead(dbFile, openDb, id, limit) {
+  const db = openDb(dbFile);
+  if (!db) return { messages: [], more: false };
+  try {
+    const n = limit * 4 + 1;
+    const rows = db.prepare('SELECT type, data, time_created FROM session_message WHERE session_id = ? ORDER BY seq DESC LIMIT ?').all(id, n);
+    const msgs = collapseTools(openCodeMessages(rows.slice(0, limit * 4).reverse()));
+    return { messages: msgs.slice(-limit), more: rows.length >= n || msgs.length > limit };
+  } catch {
+    return { messages: [], more: false };
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
+// ---------------------------------------------------------------------- Grok
+// ~/.grok/sessions/<url-encoded folder>/<session id>/{summary.json, chat_history.jsonl}
+function grokMessages(objs) {
+  const out = [];
+  for (const o of objs) {
+    if (!o || o.synthetic_reason) continue;
+    if (o.type === 'user' && Array.isArray(o.content)) {
+      const t = o.content.filter((b) => b && b.type === 'text').map((b) => b.text).join('\n').replace(/^\s*<user_query>\s*/, '').replace(/\s*<\/user_query>\s*$/, '');
+      if (t.trim() && !noise(t)) out.push({ role: 'user', text: clip(t), at: 0 });
+    } else if (o.type === 'assistant') {
+      if (typeof o.content === 'string' && o.content.trim()) out.push({ role: 'assistant', text: clip(o.content), at: 0 });
+      for (const c of Array.isArray(o.tool_calls) ? o.tool_calls : []) if (c) out.push({ role: 'tool', text: toolLine(c.name || 'tool', c.arguments), at: 0 });
+    }
+  }
+  return out;
+}
+
+/** One Grok session by id (its folder is named after it), without scanning the rest. */
+function grokGet(home, id) {
+  const root = path.join(home, '.grok', 'sessions');
+  let dirs = [];
+  try {
+    dirs = fs.readdirSync(root);
+  } catch {
+    return null;
+  }
+  for (const d of dirs) {
+    const dir = path.join(root, d, id);
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'));
+      if (j && j.info && j.info.id === id && typeof j.info.cwd === 'string') return { id, cwd: j.info.cwd, title: String(j.generated_title || j.session_summary || ''), at: Date.parse(j.updated_at || j.last_active_at) || 0, file: path.join(dir, 'chat_history.jsonl') };
+    } catch {}
+  }
+  return null;
+}
+
+function grokList(home, limit) {
+  const root = path.join(home, '.grok', 'sessions');
+  const found = [];
+  let dirs = [];
+  try {
+    dirs = fs.readdirSync(root);
+  } catch {
+    return [];
+  }
+  for (const d of dirs) {
+    let subs = [];
+    try {
+      subs = fs.readdirSync(path.join(root, d));
+    } catch {
+      continue;
+    }
+    for (const s of subs) {
+      const file = path.join(root, d, s, 'summary.json');
+      try {
+        found.push({ file, dir: path.join(root, d, s), mtime: fs.statSync(file).mtimeMs });
+      } catch {}
+    }
+  }
+  found.sort((a, b) => b.mtime - a.mtime);
+  const out = [];
+  for (const f of found.slice(0, limit)) {
+    try {
+      const j = JSON.parse(fs.readFileSync(f.file, 'utf8'));
+      const id = j && j.info && j.info.id;
+      const cwd = j && j.info && j.info.cwd;
+      if (typeof id !== 'string' || typeof cwd !== 'string') continue;
+      out.push({ id, cwd, title: String(j.generated_title || j.session_summary || ''), at: Date.parse(j.updated_at || j.last_active_at) || f.mtime, file: path.join(f.dir, 'chat_history.jsonl') });
+    } catch {}
+  }
+  return out;
 }
 
 // ------------------------------------------------------------ model choices
@@ -355,7 +557,7 @@ function codexDefaultModel(home) {
 }
 
 /** { claude: { models, efforts }, codex: { models: [{ id, efforts }], default } }: the only values a phone may pick. */
-function options({ home = os.homedir() } = {}) {
+function options({ home = os.homedir(), opencode = null } = {}) {
   const codex = { models: [], default: codexDefaultModel(home) };
   try {
     const j = JSON.parse(fs.readFileSync(path.join(home, '.codex', 'models_cache.json'), 'utf8'));
@@ -365,7 +567,14 @@ function options({ home = os.homedir() } = {}) {
       codex.models.push({ id: m.slug, efforts, default: m.default_reasoning_level || '' });
     }
   } catch {}
-  return { claude: { models: CLAUDE_MODELS, efforts: CLAUDE_EFFORTS }, codex };
+  const agents = [{ id: 'claude', name: 'Claude' }, { id: 'codex', name: 'Codex', readOnly: true }];
+  const out = { claude: { models: CLAUDE_MODELS, efforts: CLAUDE_EFFORTS }, codex };
+  if (opencode) {
+    agents.push({ id: 'opencode', name: 'OpenCode', readOnly: true });
+    out.opencode = { models: (opencode.models || []).filter((m) => /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/.test(m)).slice(0, 200), efforts: OPENCODE_EFFORTS };
+  }
+  agents.push({ id: 'grok', name: 'Grok', chat: false }); // history only: its headless mode is not verified here
+  return { agents, ...out };
 }
 
 /** Returns { model, effort } ('' = leave to the agent's own default) or null when a value is not on the lists. */
@@ -373,11 +582,14 @@ function choose(opts, agent, model, effort) {
   model = model == null ? '' : model;
   effort = effort == null ? '' : effort;
   if (typeof model !== 'string' || typeof effort !== 'string') return null;
-  if (agent === 'claude') {
-    if (model && !opts.claude.models.includes(model)) return null;
-    if (effort && !opts.claude.efforts.includes(effort)) return null;
+  if (agent === 'claude' || agent === 'opencode') {
+    const o = opts[agent];
+    if (!o) return null;
+    if (model && !o.models.includes(model)) return null;
+    if (effort && !o.efforts.includes(effort)) return null;
     return { model, effort };
   }
+  if (agent !== 'codex') return null;
   const m = model ? opts.codex.models.find((x) => x.id === model) : null;
   if (model && !m) return null;
   if (effort) {
@@ -388,4 +600,4 @@ function choose(opts, agent, model, effort) {
   return { model, effort };
 }
 
-module.exports = { ChatIndex, readMessages, options, choose, claudeMessages, codexMessages, KEY, firstText };
+module.exports = { ChatIndex, readMessages, options, choose, claudeMessages, codexMessages, grokMessages, openCodeMessages, KEY, firstText, collapseTools };

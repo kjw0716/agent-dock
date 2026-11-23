@@ -222,6 +222,8 @@
   #stats .lrow.on .who { background: rgba(255, 255, 255, .11); }
   #stats .who.static { cursor: default; }
   #stats .who i { flex: none; width: 9px; height: 9px; border-radius: 3px; }
+  #stats .logo { flex: none; display: inline-flex; width: 22px; height: 22px; }
+  #stats .whow { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
   #stats .cell { position: relative; min-width: 0; }
   #stats .plot { display: block; width: 100%; height: 50px; overflow: visible; }
   #stats .plot.day { height: 20px; }
@@ -230,7 +232,7 @@
   #stats .hit:hover { fill: rgba(255, 255, 255, .08); }
   #stats .allbar { fill: #c9ced8; }
   #stats i.allbar { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 3px; background: #c9ced8; }
-  #stats .lrow.sumrow { border-top: 1px solid rgba(255, 255, 255, .16); }
+  #stats .lrow.sumrow { border-bottom: 1px solid rgba(255, 255, 255, .16); }
   #stats .stw { fill: var(--working); }
   #stats .sta { fill: var(--waiting); }
   #stats .lane { fill: rgba(255, 255, 255, .045); }
@@ -287,6 +289,7 @@
 </div>
 <div class="h w" data-d="w"></div><div class="h e" data-d="e"></div>
 <svg class="hint" viewBox="0 0 4 18"><path d="M1 2v14M3.4 2v14" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>
+<script src="mascots.js"></script>
 <script src="stats-view.js"></script>
 <script>
 const I18N = {
@@ -298,7 +301,7 @@ const I18N = {
     tsNotInstalled: 'Tailscale is not installed on this computer.', tsDownload: 'Download Tailscale', tsLogin: 'Open Tailscale and sign in, then reopen Settings.', tsHttps: 'Turn on HTTPS certificates for your tailnet (Tailscale admin console, DNS page), then press Publish.', tsPublish: 'Publish to phone', tsServing: 'Reachable at', tsWorking: 'Working…',
     pairPhone: 'Pair a phone', pairHint: 'Scan with the phone camera. Valid for 2 minutes, one use.', pairLocal: 'Tailscale is not publishing yet: this address works only on this computer.', pairCode: 'Pairing address',
     devices: 'Paired phones', revoke: 'Revoke', revokeAll: 'Revoke all', lastSeen: 'last seen', never: 'never', phoneAnswer: 'Answer from the phone', phoneErr: 'Could not start the phone server',
-    barkTitle: 'Notifications (Bark)', barkPlaceholder: 'https://api.day.app/your-key', barkSave: 'Save', barkTest: 'Send test', barkSaved: 'Saved', barkSent: 'Test sent', barkFailed: 'Test failed', barkHint: 'Only the agent name and what happened are sent.',
+    barkTitle: 'Notifications', pushOn: 'notifications on', pushHint: 'A phone gets notifications once you press the bell on its page (iPhone: open it from the Home Screen first). Bark below is optional.', barkSub: 'Bark (optional)', barkPlaceholder: 'https://api.day.app/your-key', barkSave: 'Save', barkTest: 'Send test', barkSaved: 'Saved', barkSent: 'Test sent', barkFailed: 'Test failed', barkHint: 'Only the agent name and what happened are sent.',
     settings: 'Settings', statistics: 'Statistics', back: 'Back', agents: 'Agents shown', general: 'General',
     onTop: 'Always on top', autostart: 'Launch at login', language: 'Language',
     reset: 'Reset position & size', quit: 'Quit', none: 'No sessions', missing: 'Not found',
@@ -319,7 +322,7 @@ const I18N = {
     tsNotInstalled: '这台电脑没有安装 Tailscale。', tsDownload: '下载 Tailscale', tsLogin: '请打开 Tailscale 并登录，然后重新打开设置。', tsHttps: '请先在 Tailscale 管理后台（DNS 页面）打开 HTTPS 证书，再点「发布到手机」。', tsPublish: '发布到手机', tsServing: '访问地址', tsWorking: '处理中…',
     pairPhone: '配对手机', pairHint: '用手机相机扫描。2 分钟内有效，只能用一次。', pairLocal: 'Tailscale 还没有发布：这个地址只能在本机打开。', pairCode: '配对地址',
     devices: '已配对的手机', revoke: '撤销', revokeAll: '全部撤销', lastSeen: '最近使用', never: '从未', phoneAnswer: '允许在手机上回答', phoneErr: '手机服务启动失败',
-    barkTitle: '通知（Bark）', barkPlaceholder: 'https://api.day.app/你的key', barkSave: '保存', barkTest: '发送测试', barkSaved: '已保存', barkSent: '测试已发送', barkFailed: '测试失败', barkHint: '只发送 Agent 名称和发生了什么。',
+    barkTitle: '通知', pushOn: '已开启通知', pushHint: '在手机页面点右上角的铃铛后，这台手机就会收到通知（iPhone 需要先从主屏幕图标打开）。下面的 Bark 是可选的。', barkSub: 'Bark（可选）', barkPlaceholder: 'https://api.day.app/你的key', barkSave: '保存', barkTest: '发送测试', barkSaved: '已保存', barkSent: '测试已发送', barkFailed: '测试失败', barkHint: '只发送 Agent 名称和发生了什么。',
     settings: '设置', statistics: '统计', back: '返回', agents: '显示的 Agent', general: '通用',
     onTop: '置顶显示', autostart: '开机自启', language: '语言',
     reset: '重置位置与大小', quit: '退出', none: '没有会话', missing: '未找到',
@@ -357,68 +360,12 @@ let zoom = 1;
 /* ------------------------------------------------------------------ mascots
    One bot per agent: its signature silhouette and colour, two eyes, rosy cheeks
    and an eye glint (my own small twist). Drawn here; nothing is copied. */
-function blob(n, amp, r = 30, cy = 50) {
-  let d = '';
-  for (let i = 0; i <= 72; i++) {
-    const t = (i / 72) * Math.PI * 2;
-    const k = r * (1 + amp * Math.cos(n * t));
-    d += (i ? 'L' : 'M') + (50 + k * Math.cos(t)).toFixed(1) + ' ' + (cy + k * Math.sin(t)).toFixed(1);
-  }
-  return d + 'Z';
-}
-const LIGHT = '#f4f5f8';
-const DARK = '#14161b';
-const SPEC = {
-  claude: { c: ['#ee8b6e', '#d4623f'], body: (f) => `<path d="${blob(10, 0.075)}" fill="${f}"/>` },
-  codex: { c: ['#3fcfa3', '#1b9c75'], body: (f) => `<path d="${blob(5, 0.09)}" fill="${f}"/>` },
-  opencode: { c: ['#565b68', '#2b2f36'], eye: LIGHT, body: (f) => `<rect x="22" y="32" width="56" height="46" rx="7" fill="${f}"/><g fill="#b9bcc4"><rect x="22" y="20" width="14" height="16" rx="3"/><rect x="43" y="20" width="14" height="16" rx="3"/><rect x="64" y="20" width="14" height="16" rx="3"/></g>`, ey: 56 },
-  kilo: { c: ['#ffe066', '#f2b705'], body: (f) => `<rect x="20" y="20" width="60" height="60" rx="20" fill="${f}"/>` },
-  mimo: { c: ['#ff8a4c', '#f05a1a'], body: (f) => `<rect x="20" y="22" width="60" height="58" rx="22" fill="${f}"/><circle cx="32" cy="20" r="7" fill="${f}"/><circle cx="68" cy="20" r="7" fill="${f}"/>` },
-  cursor: { c: ['#4a4b52', '#1f2024'], eye: LIGHT, body: (f) => `<polygon points="50,18 77,34 77,66 50,82 23,66 23,34" fill="${f}" stroke="${f}" stroke-width="8" stroke-linejoin="round"/>` },
-  copilot: { c: ['#ffffff', '#d4d8e2'], goggles: true, body: (f) => `<circle cx="50" cy="52" r="29" fill="${f}"/><rect x="17" y="38" width="66" height="26" rx="13" fill="#1f2126"/><circle cx="37" cy="51" r="9.5" fill="#fff"/><circle cx="63" cy="51" r="9.5" fill="#fff"/><circle cx="38" cy="52" r="4.2" fill="${DARK}" class="eye"/><circle cx="64" cy="52" r="4.2" fill="${DARK}" class="eye"/>` },
-  gemini: { c: ['#6aa5ff', '#a07bff'], body: (f) => `<path d="M50 14C54 38 62 46 86 50C62 54 54 62 50 86C46 62 38 54 14 50C38 46 46 38 50 14Z" fill="${f}" stroke="${f}" stroke-width="6" stroke-linejoin="round"/>`, small: true },
-  antigravity: { c: ['#4285f4', '#ea4335', '#fbbc05', '#34a853'], body: (f) => `<path d="M20 72Q20 20 50 20Q80 20 80 72Q80 80 70 80L30 80Q20 80 20 72Z" fill="${f}"/>`, ey: 52 },
-  grok: { c: ['#34343a', '#0f0f12'], eye: LIGHT, body: (f) => `<ellipse cx="50" cy="52" rx="42" ry="11" transform="rotate(-18 50 50)" fill="none" stroke="#c9ccd6" stroke-width="3.4"/><circle cx="50" cy="50" r="26" fill="${f}"/><path d="M8 52A42 11 0 0 0 92 52" transform="rotate(-18 50 50)" fill="none" stroke="#c9ccd6" stroke-width="3.4"/>` },
-  deepseek: { c: ['#6b83ff', '#3d58ee'], smile: true, body: (f) => `<path d="${blob(6, 0.045)}" fill="${f}"/>` },
-  kimi: { c: ['#3a3a42', '#16171b'], eye: LIGHT, body: (f) => `<rect x="20" y="26" width="60" height="54" rx="24" fill="${f}"/><circle cx="76" cy="24" r="7" fill="#4c8dff"/>`, ey: 54 },
-  pi: { c: ['#3a3c44', '#16171b'], eye: LIGHT, body: (f) => `<rect x="18" y="24" width="64" height="18" rx="6" fill="${f}"/><rect x="28" y="38" width="15" height="40" rx="6" fill="${f}"/><rect x="57" y="38" width="15" height="40" rx="6" fill="${f}"/>`, ey: 33, ed: 12, eh: 10, nocheek: true },
-  omp: { c: ['#9b7cf8', '#5a3fd1'], body: (f) => `<rect x="18" y="24" width="64" height="18" rx="6" fill="${f}"/><rect x="28" y="38" width="15" height="40" rx="6" fill="${f}"/><rect x="57" y="38" width="15" height="40" rx="6" fill="${f}"/>`, ey: 33, ed: 12, eh: 10, nocheek: true },
-  openclaw: { c: ['#ff6a5f', '#d92b2b'], body: (f) => `<g stroke="${f}" stroke-width="4" stroke-linecap="round"><path d="M38 30L30 12M62 30L70 12"/></g><circle cx="30" cy="11" r="4.5" fill="${f}"/><circle cx="70" cy="11" r="4.5" fill="${f}"/><circle cx="50" cy="54" r="28" fill="${f}"/>`, ey: 54 },
-  hermes: { c: ['#3a3d45', '#1c1e23'], eye: LIGHT, body: (f) => `<circle cx="50" cy="52" r="29" fill="${f}"/><path d="M22 46A28 28 0 0 1 78 46Q64 40 50 46Q36 52 22 46Z" fill="#8d929c"/>`, ey: 58 },
-  droid: { c: ['#ff9a4d', '#e8611a'], body: (f) => `<polygon points="50,18 77,34 77,66 50,82 23,66 23,34" fill="${f}" stroke="${f}" stroke-width="8" stroke-linejoin="round"/>` },
-  trae: { c: ['#4be19b', '#16a870'], body: (f) => `<rect x="20" y="20" width="60" height="60" rx="18" fill="${f}"/>` },
-  qoder: { c: ['#2a2d33', '#2fd36f'], eye: LIGHT, body: () => `<path d="M20 52A30 30 0 0 1 80 52Z" fill="#2a2d33"/><path d="M20 52A30 30 0 0 0 80 52Z" fill="#2fd36f"/>`, ey: 44 },
-  zcode: { c: ['#44464e', '#1d1e22'], eye: LIGHT, body: (f) => `<polygon points="36,24 84,24 64,76 16,76" fill="${f}" stroke="${f}" stroke-width="8" stroke-linejoin="round"/>`, ex: 50 },
-  codebuddy: { c: ['#5b8cff', '#8f6bff'], body: (f) => `<path d="M24 42L28 14L47 32ZM76 42L72 14L53 32Z" fill="${f}" stroke="${f}" stroke-width="4" stroke-linejoin="round"/><rect x="20" y="28" width="60" height="52" rx="24" fill="${f}"/>`, ey: 54 },
-  workbuddy: { c: ['#35d98e', '#12a869'], body: (f) => `<path d="M24 42L28 14L47 32ZM76 42L72 14L53 32Z" fill="${f}" stroke="${f}" stroke-width="4" stroke-linejoin="round"/><rect x="20" y="28" width="60" height="52" rx="24" fill="${f}"/>`, ey: 54 },
-  qwen: { c: ['#8b7bff', '#5b45e0'], body: (f) => `<path d="${blob(6, 0.07)}" fill="${f}"/>` },
-  devin: { c: ['#3ed9c4', '#12a89a'], body: (f) => `<path d="${blob(4, 0.07)}" fill="${f}"/>` },
-  cline: { c: ['#a98bff', '#6a47e8'], body: (f) => `<path d="M50 24V12" stroke="${f}" stroke-width="4" stroke-linecap="round"/><circle cx="50" cy="11" r="4.5" fill="${f}"/><rect x="20" y="24" width="60" height="56" rx="20" fill="${f}"/>` },
-  roo: { c: ['#b890ff', '#7e4fe0'], body: (f) => `<ellipse cx="33" cy="22" rx="7" ry="15" transform="rotate(-12 33 22)" fill="${f}"/><ellipse cx="67" cy="22" rx="7" ry="15" transform="rotate(12 67 22)" fill="${f}"/><circle cx="50" cy="56" r="27" fill="${f}"/>`, ey: 56 },
-  goose: { c: ['#ffffff', '#d3d8e2'], body: (f) => `<circle cx="46" cy="54" r="27" fill="${f}"/><polygon points="68,54 90,60 68,66" fill="#ff9f43"/>`, ex: 46 },
-};
-const FALLBACK = { c: ['#a3a9b5', '#7b818c'], body: (f) => `<circle cx="50" cy="50" r="30" fill="${f}"/>` };
-
-const HAND = '<svg viewBox="0 0 24 24"><rect x="6" y="11" width="12" height="9" rx="4"/><rect x="6" y="5" width="2.7" height="10" rx="1.35"/><rect x="9.4" y="2.5" width="2.7" height="12" rx="1.35"/><rect x="12.9" y="3" width="2.7" height="11.5" rx="1.35"/><rect x="16.3" y="5" width="2.7" height="10" rx="1.35"/><rect x="2.6" y="11.5" width="2.7" height="6.5" rx="1.35" transform="rotate(-32 4 14)"/></svg>';
 function mascot(id, state, waiting = 0, unread = 0) {
-  const sp = SPEC[id] || FALLBACK;
-  const gid = 'g' + id + Math.random().toString(36).slice(2, 6);
-  const stops = sp.c.map((c, i) => `<stop offset="${(i / (sp.c.length - 1 || 1)).toFixed(2)}" stop-color="${c}"/>`).join('');
-  const dir = sp.c.length > 2 ? 'x1="0" y1="0" x2="1" y2="0"' : 'x1="0.2" y1="0" x2="0.8" y2="1"';
-  const ey = sp.ey || 50, ex = sp.ex || 50, ed = sp.ed || 9.5, eh = sp.eh || (sp.small ? 10 : 16), ew = sp.small ? 6 : 8;
-  const col = sp.eye || DARK;
-  let face = '';
-  if (!sp.goggles) {
-    const eye = (cx) => sp.smile
-      ? `<path class="eye" d="M${cx - 5} ${ey + 3}Q${cx} ${ey - 5} ${cx + 5} ${ey + 3}" fill="none" stroke="${col}" stroke-width="3.4" stroke-linecap="round"/>`
-      : `<rect class="eye" x="${cx - ew / 2}" y="${ey - eh / 2}" width="${ew}" height="${eh}" rx="${ew / 2}" fill="${col}"/><circle cx="${cx + 1.4}" cy="${ey - eh / 2 + 3}" r="1.7" fill="#fff" opacity=".9"/>`;
-    face = eye(ex - ed) + eye(ex + ed);
-    if (!sp.nocheek) face += `<ellipse cx="${ex - ed - 8}" cy="${ey + eh / 2 + 2}" rx="4.6" ry="3" fill="#ff7a9a" opacity=".4"/><ellipse cx="${ex + ed + 8}" cy="${ey + eh / 2 + 2}" rx="4.6" ry="3" fill="#ff7a9a" opacity=".4"/>`;
-  }
+  const m = mascotArt(id);
   return `<div class="bot"><svg viewBox="0 0 100 100">
-    <defs><linearGradient id="${gid}" ${dir}>${stops}</linearGradient></defs>
+    ${m.defs}
     <circle class="ring" cx="50" cy="50" r="47"/>
-    <g class="body-g">${sp.body('url(#' + gid + ')')}${face}</g>
+    ${m.body}
     <g class="check"><circle cx="84" cy="84" r="13" fill="#14161b"/><circle cx="84" cy="84" r="10" fill="#3ddc97"/>
       <path d="M79 84.5l3.6 3.6 6.4-7.2" fill="none" stroke="#10241b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
   </svg>${unread > 0 ? `<div class="unreadn" title="${esc(t('unread'))} ${unread}">${unread}</div>` : ''}${waiting > 0 ? `<div class="hand" title="${esc(t('waiting'))} ${waiting}">${HAND}<span>${waiting}</span></div>` : ''}</div>`;
@@ -566,7 +513,7 @@ function phoneSection(sw) {
   }
   const devs = phone.devices || [];
   if (devs.length) {
-    h += `<div class="sect">${t('devices')}</div>` + devs.map((d) => `<div class="opt plain"><div><div class="t">${esc(d.label)}</div><div class="d">${t('lastSeen')} ${esc(phoneAgo(d.lastSeen))}</div></div><button class="seg" data-phone="revoke" data-id="${esc(d.id)}">${t('revoke')}</button></div>`).join('') + btn('revoke', t('revokeAll'), 'data-id="all" class="quit"');
+    h += `<div class="sect">${t('devices')}</div>` + devs.map((d) => `<div class="opt plain"><div><div class="t">${esc(d.label)}</div><div class="d">${t('lastSeen')} ${esc(phoneAgo(d.lastSeen))}${d.push ? ' · ' + t('pushOn') : ''}</div></div><button class="seg" data-phone="revoke" data-id="${esc(d.id)}">${t('revoke')}</button></div>`).join('') + btn('revoke', t('revokeAll'), 'data-id="all" class="quit"');
   }
 
   h += `<div class="opt plain" data-phone="tasks"><div><div class="t">${t('tasksOn')}</div><div class="d">${phone.tasks ? (phone.tasksFull ? '' : t('tasksEdits')) : ''}</div></div>${sw(phone.tasks)}</div>`;
@@ -578,6 +525,8 @@ function phoneSection(sw) {
   }
   h += `<div class="opt plain" data-phone="answer"><div class="t">${t('phoneAnswer')}</div>${sw(phone.answer)}</div>
     <div class="sect">${t('barkTitle')}</div>
+    <div class="opt plain"><div class="d">${t('pushHint')}</div></div>
+    <div class="opt plain" style="padding-bottom:0"><div class="t">${t('barkSub')}</div></div>
     <div class="opt plain" style="display:block"><input id="barkInput" placeholder="${esc(t('barkPlaceholder'))}" value="${esc(barkDraft !== null ? barkDraft : '')}" maxlength="300" style="width:100%;font:inherit;font-size:12px;color:var(--text);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:8px;padding:6px 9px;outline:none;user-select:text">
       <div class="d" style="margin-top:4px">${phone.bark ? esc(phone.bark) + ' · ' : ''}${t('barkHint')}</div></div>
     <div class="btns"><button data-phone="barksave">${t('barkSave')}</button><button data-phone="barktest">${t('barkTest')}</button>${phone.bark ? `<button data-phone="barkclear">${t('revoke')}</button>` : ''}</div>`;
