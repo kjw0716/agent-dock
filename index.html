@@ -90,6 +90,9 @@
   @keyframes pulse { 0%, 100% { opacity: 1; stroke-width: 2.5; } 50% { opacity: .35; stroke-width: 5; } }
   @keyframes ask { 0%, 100% { transform: scale(1.1) rotate(0); } 25% { transform: scale(1.12) rotate(-3deg); } 75% { transform: scale(1.12) rotate(3deg); } }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  /* The loops are paused and stepped by a timer at ~30 fps (see tickAnimations): a running CSS animation makes Chromium
+     produce a frame every 1/60 s for this transparent window, which cost ~75% of a core for one spinning ring. */
+  * { animation-play-state: paused !important; }
 
   .name { font-weight: 600; font-size: 14px; display: flex; align-items: baseline; gap: 6px; }
   .name small { font-weight: 500; font-size: 11px; color: var(--muted); }
@@ -630,14 +633,23 @@ function render() {
 
 // The rows are rebuilt whenever the state changes, which would restart every looping animation (the spinning ring
 // jumped to a new angle). Put each one back at the phase of a clock shared by all redraws.
+// The loops stay paused (CSS above) and this advances them ~30 times a second, so the window is repainted 30x, not 60x, a second.
+let loops = []; // [animation, duration]
 function syncAnimations() {
-  const T = document.timeline.currentTime;
+  loops = [];
   for (const a of document.getAnimations()) {
     if (!(a instanceof CSSAnimation)) continue; // transitions (hover) are not looped
     const d = a.effect.getComputedTiming().duration;
-    if (typeof d === 'number' && d > 0 && isFinite(d)) a.currentTime = T % d;
+    if (typeof d === 'number' && d > 0 && isFinite(d)) loops.push([a, d]);
   }
+  tickAnimations();
 }
+function tickAnimations() {
+  if (document.hidden) return; // a hidden window needs no frames
+  const T = document.timeline.currentTime;
+  for (const [a, d] of loops) a.currentTime = T % d;
+}
+setInterval(tickAnimations, 33);
 
 function refreshTimes() {
   document.querySelectorAll('.when').forEach((n) => { n.textContent = when(n.dataset.state, Number(n.dataset.since)); });
@@ -755,7 +767,8 @@ document.getElementById('rows').addEventListener('click', async (e) => {
   if (!row) return;
   const id = row.dataset.id;
   const only = rows.find((x) => x.id === id);
-  if (jumpOn && canJump(id) && only && only.sessions.length === 1 && (await window.hud.openChat(id, only.sessions[0].id))) return; // one session: go straight to it; if it cannot be opened, expand as usual
+  // an open row closes when its header is clicked; only a closed one-session row goes straight to the chat
+  if (!open.has(id) && jumpOn && canJump(id) && only && only.sessions.length === 1 && (await window.hud.openChat(id, only.sessions[0].id))) return; // one session: go straight to it; if it cannot be opened, expand as usual
   if (row.classList.contains('unread')) window.hud.markRead(id); // looking at it counts as reading it
   open.has(id) ? open.delete(id) : open.add(id);
   syncExpanded(true); // a click always re-asserts it, even after a manual width drag
