@@ -32,19 +32,21 @@ const label = (title, dir) => {
   return dir ? path.basename(String(dir).replace(/[\\/]+$/, '')) || null : null;
 };
 
-/** Turn rows of session_v2 into dock sessions. */
-function toSessions(rows, { now = Date.now(), open = false } = {}) {
+/** Turn rows of session_v2 into dock sessions. `kids`: chat id -> { n, since } for subagent chats still running under it. */
+function toSessions(rows, { now = Date.now(), open = false, kids = new Map() } = {}) {
   const out = [];
   for (const r of rows) {
     const busyAt = Number(r.time_busy) || 0;
     const idleAt = Number(r.time_idle) || 0;
     let state = busyAt && busyAt > idleAt ? 'working' : 'done';
+    const sub = state === 'done' ? kids.get(String(r.id)) : null;
+    if (sub) state = 'working'; // its own turn is over but a subagent it started is still busy
     let abandoned = false;
     if (state === 'working' && !open && now - busyAt > STALE_BUSY) {
       state = 'done'; // the app is gone and never wrote the idle mark
       abandoned = true;
     }
-    const since = state === 'working' ? busyAt : idleAt || Number(r.time_updated) || now;
+    const since = sub ? sub.since : state === 'working' ? busyAt : idleAt || Number(r.time_updated) || now;
     if (state === 'done' && now - since > RECENT_WITHIN) continue;
     out.push({
       agent: 'opencode',
@@ -55,6 +57,7 @@ function toSessions(rows, { now = Date.now(), open = false } = {}) {
       since,
       dim: state === 'done' && now - since > DIM_AFTER,
       exact: true, // the busy mark is the app's own, not a guess
+      ...(sub ? { subagents: sub.n } : {}),
       viewedAt: Number(r.time_viewed) || 0,
       ...(abandoned ? { abandoned: true } : {}),
     });
@@ -67,6 +70,31 @@ const SQL = `select id, title, directory, time_busy, time_idle, time_viewed, tim
   where parent_id is null and time_archived is null
   order by max(coalesce(time_busy, 0), coalesce(time_idle, 0), time_updated) desc
   limit ${MAX_CHATS * 3}`;
+
+// Subagents are chats of their own (parent_id set) that carry the same busy / idle marks.
+const BUSY_KIDS = `select id, parent_id, time_busy from session_v2
+  where parent_id is not null and time_archived is null and time_busy > ? and (time_idle is null or time_busy > time_idle)`;
+const PARENT = 'select parent_id from session_v2 where id = ?';
+
+/** Top-level chat id -> { n, since } for the busy subagent chats below it (a subagent can start its own). */
+function busyKids(db, now) {
+  const kids = new Map();
+  const up = db.prepare(PARENT);
+  for (const k of db.prepare(BUSY_KIDS).all(now - STALE_BUSY)) {
+    let root = k.parent_id;
+    for (let i = 0; i < 6 && root; i++) {
+      const p = up.get(root);
+      if (!p || !p.parent_id) break;
+      root = p.parent_id;
+    }
+    if (!root) continue;
+    const cur = kids.get(String(root)) || { n: 0, since: Infinity };
+    cur.n++;
+    cur.since = Math.min(cur.since, Number(k.time_busy));
+    kids.set(String(root), cur);
+  }
+  return kids;
+}
 
 class OpenCodeReader {
   constructor({ file, driver } = {}) {
@@ -90,7 +118,7 @@ class OpenCodeReader {
       }
     }
     try {
-      const list = toSessions(this.db.prepare(SQL).all(), { now, open });
+      const list = toSessions(this.db.prepare(SQL).all(), { now, open, kids: busyKids(this.db, now) });
       return list.slice(0, MAX_CHATS);
     } catch {
       try {
@@ -103,4 +131,4 @@ class OpenCodeReader {
   }
 }
 
-module.exports = { OpenCodeReader, toSessions, label };
+module.exports = { OpenCodeReader, toSessions, busyKids, label };

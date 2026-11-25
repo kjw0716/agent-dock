@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { OpenCodeReader, toSessions, label } = require('../opencode');
+const { OpenCodeReader, toSessions, busyKids, label } = require('../opencode');
 const { UnreadTracker } = require('../unread');
 
 const NOW = 1_800_000_000_000;
@@ -73,4 +73,28 @@ test('an exact busy spell counts as unread however short, a guessed one does not
   g.update([{ agent: 'opencode', id: 'a', state: 'working' }], 0, minWork);
   g.update([{ agent: 'opencode', id: 'a', state: 'done' }], 2000, minWork);
   assert.deepStrictEqual(g.list(), []);
+});
+
+test('an idle chat whose subagent chat is still busy counts as working', () => {
+  const kids = new Map([['ses_a', { n: 2, since: NOW - 120000 }]]);
+  const [s] = toSessions([row()], { now: NOW, open: true, kids });
+  assert.strictEqual(s.state, 'working');
+  assert.strictEqual(s.subagents, 2);
+  assert.strictEqual(s.since, NOW - 120000);
+  assert.strictEqual(toSessions([row()], { now: NOW, open: true })[0].state, 'done');
+  // a chat that is busy itself keeps its own mark
+  const [own] = toSessions([row({ time_busy: NOW - 5000, time_idle: NOW - 50000 })], { now: NOW, open: true, kids });
+  assert.strictEqual(own.since, NOW - 5000);
+});
+
+test('busy subagent chats are charged to the top-level chat, also when a subagent started its own', () => {
+  const parents = { kid1: 'top', kid2: 'kid1', top: null };
+  const db = {
+    prepare: (sql) => (/select parent_id from/.test(sql)
+      ? { get: (id) => (id in parents ? { parent_id: parents[id] } : undefined) }
+      : { all: (cutoff) => [{ id: 'kid1', parent_id: 'top', time_busy: NOW - 3000 }, { id: 'kid2', parent_id: 'kid1', time_busy: NOW - 1000 }, { id: 'x', parent_id: null, time_busy: NOW }].filter((k) => k.parent_id && k.time_busy > cutoff) }),
+  };
+  const kids = busyKids(db, NOW);
+  assert.deepStrictEqual([...kids.keys()], ['top']);
+  assert.deepStrictEqual(kids.get('top'), { n: 2, since: NOW - 3000 });
 });
