@@ -766,9 +766,7 @@ document.getElementById('rows').addEventListener('click', async (e) => {
   const row = e.target.closest('.row');
   if (!row) return;
   const id = row.dataset.id;
-  const only = rows.find((x) => x.id === id);
-  // an open row closes when its header is clicked; only a closed one-session row goes straight to the chat
-  if (!open.has(id) && jumpOn && canJump(id) && only && only.sessions.length === 1 && (await window.hud.openChat(id, only.sessions[0].id))) return; // one session: go straight to it; if it cannot be opened, expand as usual
+  // the big part of a row only opens and closes it; the chat opens from the small session line inside
   if (row.classList.contains('unread')) window.hud.markRead(id); // looking at it counts as reading it
   open.has(id) ? open.delete(id) : open.add(id);
   syncExpanded(true); // a click always re-asserts it, even after a manual width drag
