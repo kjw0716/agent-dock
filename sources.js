@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { OTHERS, otherSessions } = require('./agents');
-const { inspectSession, fullText } = require('./asks');
+const { inspectSession, fullText, transcriptPath } = require('./asks');
 const { OpenCodeReader } = require('./opencode');
 
 const MIN = 60 * 1000;
@@ -30,7 +30,37 @@ function pidAlive(pid) {
   }
 }
 
-function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks, inspect = inspectSession, skipAsk } = {}) {
+// Subagents (and background agents) a session started keep running after its own turn ended. Claude Code keeps each in
+// <project>/<session id>/subagents/agent-<id>.jsonl with an agent-<id>.meta.json that gets "finished": true when it ends.
+// Running = not finished and its transcript was written within SUB_STALE (a crashed one never gets the flag).
+const SUB_STALE = 15 * MIN;
+function runningSubagents(sessionId, cwd, now = Date.now(), { transcript = transcriptPath } = {}) {
+  const file = transcript(sessionId, cwd);
+  if (!file) return { n: 0, since: 0 };
+  const dir = path.join(path.dirname(file), sessionId, 'subagents');
+  let names;
+  try {
+    names = fs.readdirSync(dir).filter((f) => f.endsWith('.meta.json'));
+  } catch {
+    return { n: 0, since: 0 };
+  }
+  let n = 0;
+  let since = 0;
+  for (const m of names) {
+    try {
+      const log = fs.statSync(path.join(dir, m.replace(/\.meta\.json$/, '.jsonl')));
+      if (now - log.mtimeMs > SUB_STALE) continue;
+      const meta = JSON.parse(fs.readFileSync(path.join(dir, m), 'utf8'));
+      if (meta.finished === true) continue;
+      const born = fs.statSync(path.join(dir, m)).birthtimeMs || log.mtimeMs;
+      n++;
+      since = since ? Math.min(since, born) : born;
+    } catch {}
+  }
+  return { n, since };
+}
+
+function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks, inspect = inspectSession, skipAsk, subagents = runningSubagents } = {}) {
   dir = dir || path.join(os.homedir(), '.claude', 'sessions');
   let files = [];
   try {
@@ -64,6 +94,16 @@ function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks, inspect
         since = Math.max(since, ask.at || 0);
       }
     }
+    // The turn is over but a subagent it started is still running: the session is still working.
+    let subs = 0;
+    if (state === 'done' && d.sessionId) {
+      const r = subagents(d.sessionId, d.cwd, now);
+      if (r.n > 0) {
+        state = 'working';
+        subs = r.n;
+        since = Math.max(since, r.since || 0);
+      }
+    }
     out.push({
       agent: 'claude',
       id: d.sessionId || f,
@@ -73,6 +113,7 @@ function claudeSessions({ dir, now = Date.now(), alive = pidAlive, asks, inspect
       dim: state === 'done' && now - since > DONE_DIM_AFTER,
       // The Claude desktop app's own id for this session; its claude://code/continue link only takes this form.
       ...(typeof d.hostSessionId === 'string' && /^local_[A-Za-z0-9-]{1,64}$/.test(d.hostSessionId) ? { host: d.hostSessionId } : {}),
+      ...(subs ? { subagents: subs } : {}),
       ...(ask ? { ask } : {}),
       ...(state === 'done' && reply ? { reply } : {}),
     });
@@ -293,4 +334,4 @@ function collect(opts = {}) {
   return summarize([...claudeSessions(opts.claude), ...codexSessions({ ...opts.codex, open: !!(opts.others && opts.others.running && opts.others.running.has('codex.exe')) }), ...(oc || []), ...otherSessions(others)]);
 }
 
-module.exports = { claudeSessions, codexSessions, codexReduce, summarize, collect, AGENTS };
+module.exports = { claudeSessions, runningSubagents, codexSessions, codexReduce, summarize, collect, AGENTS };

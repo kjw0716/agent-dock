@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { claudeSessions, codexSessions, codexReduce, summarize } = require('../sources');
+const { claudeSessions, runningSubagents, codexSessions, codexReduce, summarize } = require('../sources');
 
 const NOW = Date.parse('2026-11-15T12:00:00Z');
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'hud-'));
@@ -118,4 +118,37 @@ test('claude: a dismissed (or already opened) question no longer makes the sessi
   assert.strictEqual(skipped.ask, undefined);
   assert.strictEqual(skipped.since, NOW - 60000); // not moved forward by the question
   assert.strictEqual(claudeSessions({ dir, now: NOW, alive: () => true, asks, skipAsk: () => false })[0].state, 'waiting');
+});
+
+test('claude: an idle session whose subagent is still running counts as working', () => {
+  const root = tmp();
+  const sid = '11111111-2222-3333-4444-555555555555';
+  const proj = path.join(root, 'proj');
+  fs.mkdirSync(path.join(proj, sid, 'subagents'), { recursive: true });
+  const transcript = () => path.join(proj, sid + '.jsonl');
+  const sub = path.join(proj, sid, 'subagents');
+  const agent = (id, meta, ageMs) => {
+    write(sub, `agent-${id}.meta.json`, meta);
+    write(sub, `agent-${id}.jsonl`, '{}');
+    const t = new Date(NOW - ageMs);
+    fs.utimesSync(path.join(sub, `agent-${id}.jsonl`), t, t);
+  };
+  agent('run', { description: 'x', requestShape: 'background' }, 5000); // no "finished": running
+  agent('done', { finished: true }, 5000);
+  agent('dead', {}, 3600e3); // never finished but silent for an hour: crashed
+  assert.strictEqual(runningSubagents(sid, 'cwd', NOW, { transcript }).n, 1);
+
+  const dir = tmp();
+  write(dir, '1.json', { kind: 'interactive', cwd: 'cwd', pid: 1, sessionId: sid, status: 'idle', statusUpdatedAt: NOW - 60000 });
+  const noAsk = { asks: () => null };
+  const s = claudeSessions({ dir, now: NOW, alive: () => true, ...noAsk, subagents: (id, c, n) => runningSubagents(id, c, n, { transcript }) })[0];
+  assert.strictEqual(s.state, 'working');
+  assert.strictEqual(s.subagents, 1);
+  fs.writeFileSync(path.join(sub, 'agent-run.meta.json'), JSON.stringify({ finished: true }));
+  const after = claudeSessions({ dir, now: NOW, alive: () => true, ...noAsk, subagents: (id, c, n) => runningSubagents(id, c, n, { transcript }) })[0];
+  assert.strictEqual(after.state, 'done');
+  // a question waiting for the user still wins over "working"
+  agent('run2', {}, 1000);
+  const asked = claudeSessions({ dir, now: NOW, alive: () => true, asks: () => ({ id: 'q', question: 'q?', options: [], at: NOW, canAnswer: true }), subagents: (id, c, n) => runningSubagents(id, c, n, { transcript }) })[0];
+  assert.strictEqual(asked.state, 'waiting');
 });
